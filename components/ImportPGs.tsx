@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { Network, CheckCircle, Plus, Trash2, Search, Building2 } from 'lucide-react';
 import { writeBatch, collection, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { PG, HospitalUnit } from '../types';
@@ -67,7 +66,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
       <header className="flex justify-between items-center">
         <div>
            <h4 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-            <Network className="text-blue-600" size={28}/> Lista Oficial de PGs
+            <span className="text-3xl filter drop-shadow-sm">🕸️</span> Lista Oficial de PGs
            </h4>
            <p className="text-slate-500 text-sm mt-1">Defina os nomes oficiais dos Pequenos Grupos disponíveis.</p>
         </div>
@@ -82,7 +81,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
               !isBarcarena ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <Building2 size={16} /> HAB (Belém)
+            <span className="text-lg">🏥</span> HAB (Belém)
           </button>
           <button
             onClick={() => setTargetUnit('Barcarena')}
@@ -90,7 +89,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
               isBarcarena ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <Building2 size={16} /> HABA (Barcarena)
+            <span className="text-lg">🏥</span> HABA (Barcarena)
           </button>
         </div>
       </div>
@@ -109,7 +108,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
           <div className="flex flex-col gap-3">
             {result && (
                 <div className="flex items-center justify-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-xl border border-green-100 animate-in zoom-in-95">
-                    <CheckCircle size={14}/> 
+                    <span className="text-lg">✅</span>
                     <span className="text-[10px] font-black uppercase tracking-widest">{result.total} Salvos em {result.unit}</span>
                 </div>
             )}
@@ -120,14 +119,14 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
                     isBarcarena ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
                 }`}
                 >
-                {isProcessing ? '...' : <><Plus size={16}/> Cadastrar PGs em {targetUnit}</>}
+                {isProcessing ? '...' : <><span className="text-lg">➕</span> Cadastrar PGs em {targetUnit}</>}
             </button>
           </div>
         </div>
 
         <div className="lg:col-span-2">
             <div className="relative mb-4">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg filter grayscale opacity-50">🔍</span>
               <input 
                 type="text" 
                 placeholder="Pesquisar PG..." 
@@ -150,7 +149,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
                     {filtered.map(p => (
                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                           <td className="p-4 w-16">
-                             <button onClick={() => setItemToDelete({id: p.id, name: p.name})} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                             <button onClick={() => setItemToDelete({id: p.id, name: p.name})} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-lg filter drop-shadow-sm hover:scale-110">🗑️</button>
                           </td>
                           <td className="p-4 font-bold text-slate-700 text-sm">{p.name}</td>
                           <td className="p-4">

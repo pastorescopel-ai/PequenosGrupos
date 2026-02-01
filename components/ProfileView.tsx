@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, IdCard, Building, Lock, CheckCircle, ShieldCheck, User, Save, AlertCircle, Phone, Camera, Edit3, Loader2, BellRing, BellOff } from 'lucide-react';
+import { Camera, Loader2, BellRing, BellOff } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { Leader } from '../types';
@@ -146,11 +146,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
             <div className={`p-6 rounded-3xl border transition-all ${isAdmin ? 'bg-white border-slate-200 focus-within:ring-4 focus-within:ring-blue-600/5 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-70'}`}>
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Nome Completo (Exibição)</label>
               <div className="flex items-center gap-3">
-                <User size={20} className={isAdmin ? "text-blue-600" : "text-slate-300"} />
+                <span className="text-2xl filter drop-shadow-sm">👤</span>
                 {isAdmin ? (
                   <input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Seu nome" />
                 ) : (
-                  <><span className="font-black text-slate-800 truncate">{formData.full_name}</span><Lock size={14} className="text-slate-300 ml-auto" /></>
+                  <><span className="font-black text-slate-800 truncate">{formData.full_name}</span><span className="ml-auto text-lg grayscale opacity-50">🔒</span></>
                 )}
               </div>
             </div>
@@ -158,11 +158,11 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
             <div className={`p-6 rounded-3xl border transition-all ${isAdmin ? 'bg-white border-slate-200 focus-within:ring-4 focus-within:ring-blue-600/5 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-70'}`}>
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Matrícula / ID</label>
               <div className="flex items-center gap-3">
-                <IdCard size={20} className={isAdmin ? "text-blue-600" : "text-slate-300"} />
+                <span className="text-2xl filter drop-shadow-sm">💳</span>
                 {isAdmin ? (
                   <input type="text" value={formData.employee_id} onChange={e => setFormData({...formData, employee_id: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Matrícula" />
                 ) : (
-                  <><span className="font-black text-slate-800">{formData.employee_id}</span><Lock size={14} className="text-slate-300 ml-auto" /></>
+                  <><span className="font-black text-slate-800">{formData.employee_id}</span><span className="ml-auto text-lg grayscale opacity-50">🔒</span></>
                 )}
               </div>
             </div>
@@ -170,7 +170,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
             <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm focus-within:ring-4 focus-within:ring-blue-600/5 transition-all">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">WhatsApp</label>
               <div className="flex items-center gap-3">
-                <Phone size={20} className="text-blue-600" />
+                <span className="text-2xl filter drop-shadow-sm">📱</span>
                 <input type="tel" value={formData.whatsapp} onChange={handlePhoneChange} placeholder="(91) 99999-9999" maxLength={15} className="w-full bg-transparent font-black text-slate-800 outline-none" />
               </div>
             </div>
@@ -178,14 +178,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
             <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm focus-within:ring-4 focus-within:ring-blue-600/5 transition-all">
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Setor de Atuação</label>
               <div className="flex items-center gap-3">
-                <Building size={20} className="text-blue-600" />
+                <span className="text-2xl filter drop-shadow-sm">🏢</span>
                 <input type="text" value={formData.sector_name} onChange={e => setFormData({...formData, sector_name: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Seu setor" />
               </div>
             </div>
           </div>
 
           <div className="pt-10 border-t border-slate-100">
-            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><BellRing className="text-blue-600" /> Notificações</h3>
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><span className="text-3xl filter drop-shadow-sm">🔔</span> Notificações</h3>
             <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 mb-10 flex flex-col sm:flex-row items-center justify-between gap-6">
               <div className="flex items-center gap-5">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${formData.browser_notifications_enabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-400'}`}>
@@ -208,13 +208,13 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               </button>
             </div>
 
-            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><ShieldCheck className="text-blue-600" /> Segurança</h3>
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><span className="text-3xl filter drop-shadow-sm">🛡️</span> Segurança</h3>
             <button 
               onClick={handleSave} 
               disabled={isProcessing || isSaving}
               className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <span className="text-xl">💾</span>}
               {isSaving ? "Salvando..." : "Salvar Alterações"}
             </button>
           </div>

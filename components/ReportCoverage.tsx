@@ -1,16 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Printer, 
-  MapPin, 
-  Loader2, 
-  Layers, 
-  Users, 
-  ShieldCheck, 
-  Download, 
-  Archive,
-  CheckCircle2
-} from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 // @ts-ignore
 import saveAs from 'file-saver';
 // @ts-ignore
@@ -30,71 +20,51 @@ interface ReportCoverageProps {
   sectors: Sector[];
   members: Collaborator[];
   allCollaborators: Collaborator[];
-  leaders: Leader[]; // Injetado via MainContent
+  leaders: Leader[];
   photos?: PGMeetingPhoto[];
 }
 
-const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings, sectors, members, allCollaborators, leaders = [], photos = [] }) => {
+interface ResolvedAssets {
+  header: { data: string, ratio: number };
+  signature: { data: string, ratio: number } | null;
+  footer: string | null;
+}
+
+const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings, sectors, members, allCollaborators, leaders = [] }) => {
   const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>(user.hospital);
-  const [isGenerating, setIsGenerating] = useState(false);
+  
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [renderItems, setReportItemsToRender] = useState<any[]>([]);
   
   const [printMode, setPrintMode] = useState<'sector' | 'pg'>('sector');
-  const [reportPeriod, setReportPeriod] = useState({ month: 'Janeiro', year: '2026' });
 
-  const [assets, setAssets] = useState<{ 
-    header: string | null, 
-    headerRatio: number,
-    footer: string | null, 
-    signature: string | null,
-    signatureRatio: number 
-  }>({ header: null, headerRatio: 1, footer: null, signature: null, signatureRatio: 1 });
-
-  const getBase64ImageFromURL = (url: string): Promise<{ data: string, ratio: number }> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.setAttribute('crossOrigin', 'anonymous');
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject('Canvas error');
-        ctx.drawImage(img, 0, 0);
-        resolve({
-          data: canvas.toDataURL('image/png'),
-          ratio: img.width / img.height
-        });
-      };
-      img.onerror = (e) => reject(e);
-      img.src = url + (url.includes('?') ? '&' : '?') + 'v_final_clarity=' + Date.now();
-    });
+  // FUNÇÃO MESTRE: Converte URL em Base64
+  const fetchAssetAsBase64 = async (url: string | undefined, fallback: string): Promise<{ data: string, ratio: number }> => {
+    if (!url) return { data: fallback, ratio: 2.5 };
+    
+    try {
+      const proxyUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      const response = await fetch(proxyUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error('Falha no fetch');
+      
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          const img = new Image();
+          img.onload = () => resolve({ data: base64data, ratio: img.width / img.height });
+          img.onerror = () => resolve({ data: fallback, ratio: 2.5 });
+          img.src = base64data;
+        };
+        reader.onerror = () => resolve({ data: fallback, ratio: 2.5 });
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn("Recorrendo ao logo interno (CORS ou erro de rede):", url);
+      return { data: fallback, ratio: 2.5 };
+    }
   };
-
-  useEffect(() => {
-    const loadAssets = async () => {
-      let headerUrl = selectedUnit === 'Belém' ? settings.template_belem_url : settings.template_barcarena_url;
-      const footerUrl = selectedUnit === 'Belém' ? settings.footer_belem_url : settings.footer_barcarena_url;
-      
-      let headerData = null, headerRatio = 1, footerB64 = null, signatureB64 = null, signatureRatio = 1;
-      
-      try { 
-        if (headerUrl) { 
-          const res = await getBase64ImageFromURL(headerUrl); 
-          headerData = res.data; 
-          headerRatio = res.ratio; 
-        } else if (REPORT_SPECIFIC_LOGO || GLOBAL_BRAND_LOGO) {
-          headerData = REPORT_SPECIFIC_LOGO || GLOBAL_BRAND_LOGO;
-          headerRatio = 2;
-        }
-      } catch (e) {}
-      try { if (footerUrl) { const res = await getBase64ImageFromURL(footerUrl); footerB64 = res.data; } } catch (e) {}
-      try { if (settings.signature_url) { const res = await getBase64ImageFromURL(settings.signature_url); signatureB64 = res.data; signatureRatio = res.ratio; } } catch (e) {}
-      
-      setAssets({ header: headerData, headerRatio, footer: footerB64, signature: signatureB64, signatureRatio });
-    };
-    loadAssets();
-  }, [selectedUnit, settings]);
 
   const reportItems = useMemo(() => {
     const targetSectors = isAdmin 
@@ -107,7 +77,6 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
         const sectorMembers = members.filter(m => m.sector_name === sector.name && m.active !== false);
         const sectorLeaders = leaders.filter(l => l.sector_name === sector.name && l.active && l.hospital === selectedUnit);
         
-        // Unifica os IDs de matrícula para evitar duplicidade líder/membro
         const uniqueMatriculas = new Set([
             ...sectorMembers.map(m => m.employee_id),
             ...sectorLeaders.map(l => l.employee_id)
@@ -123,7 +92,6 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
         });
       });
     } else {
-      // Agrupamento por PG
       const uniquePGNames = Array.from(new Set([
           ...members.filter(m => m.active !== false).map(m => (m as any).pg_name),
           ...leaders.filter(l => l.active).map(l => l.pg_name)
@@ -155,27 +123,25 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
     return items.sort((a, b) => a.name.localeCompare(b.name));
   }, [sectors, members, allCollaborators, leaders, selectedUnit, isAdmin, user.hospital, printMode]);
 
-  const drawMasterFrame = (pdf: any, layout: UnitLayout) => {
-    const hBg = layout.header_bg_color || '#ffffff';
-    pdf.setFillColor(hBg);
+  const drawMasterFrame = (pdf: any, layout: UnitLayout, resolved: ResolvedAssets) => {
+    pdf.setFillColor(layout.header_bg_color || '#ffffff');
     pdf.rect(layout.header.x, layout.header.y, layout.header.w, layout.header.h, 'F');
 
-    if (assets.header) {
-        const padding = 5;
-        const availH = layout.header.h - (padding * 2);
-        const imgW = availH * assets.headerRatio;
-        pdf.addImage(assets.header, 'PNG', layout.header.x + padding, layout.header.y + padding, Math.min(imgW, layout.header.w - 10), availH);
-    }
+    const padding = 5;
+    const availH = layout.header.h - (padding * 2);
+    const imgW = availH * resolved.header.ratio;
+    const finalW = Math.min(imgW, layout.header.w - 10);
+    pdf.addImage(resolved.header.data, 'PNG', layout.header.x + padding, layout.header.y + padding, finalW, availH);
 
-    if (assets.footer) {
-        pdf.addImage(assets.footer, 'PNG', layout.footer.x, layout.footer.y, layout.footer.w, layout.footer.h);
+    if (resolved.footer) {
+        pdf.addImage(resolved.footer, 'PNG', layout.footer.x, layout.footer.y, layout.footer.w, layout.footer.h);
     }
     
-    if (assets.signature) {
+    if (resolved.signature) {
         const sigH = layout.signature.h || 12; 
-        const sigW = sigH * assets.signatureRatio;
+        const sigW = sigH * resolved.signature.ratio;
         const sigX = 105 - (sigW / 2);
-        pdf.addImage(assets.signature, 'PNG', sigX, layout.signature.y, sigW, sigH);
+        pdf.addImage(resolved.signature.data, 'PNG', sigX, layout.signature.y, sigW, sigH);
     }
     
     if (settings.director_name) {
@@ -194,7 +160,28 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
 
   const generatePDFBlob = async (itemsBatch: any[]): Promise<Blob> => {
     setReportItemsToRender(itemsBatch);
-    await new Promise(resolve => setTimeout(resolve, 2200));
+    
+    const headerUrl = selectedUnit === 'Belém' ? settings.template_belem_url : settings.template_barcarena_url;
+    const footerUrl = selectedUnit === 'Belém' ? settings.footer_belem_url : settings.footer_barcarena_url;
+    
+    const [resolvedHeader, resolvedSignature] = await Promise.all([
+        fetchAssetAsBase64(headerUrl, REPORT_SPECIFIC_LOGO || GLOBAL_BRAND_LOGO),
+        settings.signature_url ? fetchAssetAsBase64(settings.signature_url, "") : Promise.resolve(null)
+    ]);
+
+    let resolvedFooterData: string | null = null;
+    if (footerUrl) {
+        const f = await fetchAssetAsBase64(footerUrl, "");
+        resolvedFooterData = f.data || null;
+    }
+
+    const resolvedAssets: ResolvedAssets = {
+        header: resolvedHeader,
+        signature: (resolvedSignature && resolvedSignature.data) ? resolvedSignature : null,
+        footer: resolvedFooterData
+    };
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const key = selectedUnit === 'Belém' ? 'belem' : 'barcarena';
@@ -211,7 +198,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
 
     for (let i = 0; i < itemsBatch.length; i += 3) {
         if (i > 0) pdf.addPage();
-        drawMasterFrame(pdf, currentLayout);
+        drawMasterFrame(pdf, currentLayout, resolvedAssets);
 
         const pageItems = itemsBatch.slice(i, i + 3);
         for (let j = 0; j < pageItems.length; j++) {
@@ -235,7 +222,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
 
   const handleBulkExportZip = async () => {
     if (reportItems.length === 0) return;
-    setIsGenerating(true);
+    setGeneratingId('bulk');
     const zip = new JSZip();
     try {
         for (const item of reportItems) {
@@ -245,23 +232,27 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
         const content = await zip.generateAsync({ type: "blob" });
         saveAs(content, `PACOTE_RELATORIOS_${selectedUnit.toUpperCase()}.zip`);
     } catch (e) {
-        alert("Erro na geração do ZIP.");
+        alert("Erro na geração do ZIP. Verifique conexão.");
     } finally {
-        setIsGenerating(false);
+        setGeneratingId(null);
         setReportItemsToRender([]);
     }
   };
 
   const handleSingleExport = async (item: any) => {
-    setIsGenerating(true);
+    setGeneratingId(item.id);
     try {
         const blob = await generatePDFBlob([item]);
         saveAs(blob, `RELATORIO_${item.name.replace(/\s+/g, '_')}.pdf`);
+    } catch (e) {
+        alert("Erro ao emitir documento. Tente novamente.");
     } finally {
-        setIsGenerating(false);
+        setGeneratingId(null);
         setReportItemsToRender([]);
     }
   };
+
+  const isBusy = generatingId !== null;
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-32 text-left">
@@ -277,7 +268,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
                                 <h4 className="text-3xl font-black text-slate-900 uppercase leading-tight tracking-tight break-words">{item.name}</h4>
                             </div>
                             <div className="text-right shrink-0">
-                                <p className="text-xs font-black text-slate-800 uppercase tracking-tighter">{reportPeriod.month} {reportPeriod.year}</p>
+                                <p className="text-xs font-black text-slate-800 uppercase tracking-tighter">Referência 2026</p>
                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">CÓD: {item.code}</p>
                             </div>
                         </div>
@@ -289,7 +280,9 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
                     </div>
                     <div className="w-[2px] h-20 bg-slate-100 shrink-0"></div>
                     <div className="w-28 flex flex-col justify-center items-center text-center gap-3 shrink-0">
-                        <div className={`p-4 rounded-[1.5rem] border ${item.coverage_percent >= 80 ? 'bg-green-50 border-green-100 text-green-600' : 'bg-orange-50 border-orange-100 text-orange-600'}`}><ShieldCheck size={36}/></div>
+                        <div className={`p-4 rounded-[1.5rem] border ${item.coverage_percent >= 80 ? 'bg-green-50 border-green-100 text-green-600' : 'bg-orange-50 border-orange-100 text-orange-600'}`}>
+                            <span className="text-2xl filter drop-shadow-sm">🛡️</span>
+                        </div>
                         <p className="text-[7px] font-black uppercase text-slate-400 leading-tight tracking-wide">Autenticado via<br/>PG Hospital</p>
                     </div>
                   </div>
@@ -299,27 +292,59 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
 
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8">
         <div>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase leading-none">Emissão Master</h2>
-          <p className="text-slate-500 font-medium mt-2">Relatórios Oficiais (Considerando Líderes como Ativos).</p>
+          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase leading-none">Relatórios Master</h2>
+          <p className="text-slate-500 font-medium mt-2">Emissão de documentos oficiais de cobertura.</p>
         </div>
         <div className="flex flex-wrap gap-4 w-full xl:w-auto">
              <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-                <button onClick={() => setPrintMode('sector')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 transition-all ${printMode === 'sector' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}><Layers size={14}/> Setores</button>
-                <button onClick={() => setPrintMode('pg')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 transition-all ${printMode === 'pg' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400'}`}><Users size={14}/> PGs</button>
+                <button 
+                    onClick={() => setPrintMode('sector')} 
+                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${printMode === 'sector' ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <span className="text-lg">📑</span> Por Setores
+                </button>
+                <button 
+                    onClick={() => setPrintMode('pg')} 
+                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all ${printMode === 'pg' ? 'bg-white text-emerald-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <span className="text-lg">👥</span> Por PGs
+                </button>
              </div>
-             <button onClick={handleBulkExportZip} disabled={isGenerating || reportItems.length === 0} className="px-10 py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-3 bg-blue-900 text-white hover:bg-black transition-all shadow-2xl active:scale-95 disabled:opacity-50">
-                {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <Archive size={18} />} 
-                <span>Exportar Tudo (ZIP)</span>
+             <button 
+                onClick={handleBulkExportZip} 
+                disabled={isBusy || reportItems.length === 0} 
+                className={`
+                    px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-3 transition-all shadow-xl
+                    ${generatingId === 'bulk' 
+                        ? 'bg-amber-100 text-amber-700 animate-pulse cursor-wait' 
+                        : 'bg-slate-900 text-white hover:bg-black active:scale-95'
+                    }
+                    ${(isBusy && generatingId !== 'bulk') || reportItems.length === 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}
+                `}
+             >
+                {generatingId === 'bulk' ? <Loader2 size={18} className="animate-spin text-amber-600"/> : <span className="text-xl">📦</span>} 
+                <span>{generatingId === 'bulk' ? 'Compactando...' : 'Baixar ZIP Completo'}</span>
              </button>
         </div>
       </div>
 
       <div className="bg-white rounded-[4rem] border border-slate-200 overflow-hidden shadow-sm">
-        <div className="p-10 border-b border-slate-100 bg-slate-50/40 grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade Hospitalar</label><div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm"><button onClick={() => setSelectedUnit('Belém')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Belém' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Belém</button><button onClick={() => setSelectedUnit('Barcarena')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Barcarena' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Barcarena</button></div></div>
-          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Mês de Referência</label><select value={reportPeriod.month} onChange={e => setReportPeriod({...reportPeriod, month: e.target.value})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-2xl font-black text-slate-700 text-xs shadow-sm cursor-pointer outline-none">{['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dizembro'].map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-          <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Ano</label><select value={reportPeriod.year} onChange={e => setReportPeriod({...reportPeriod, year: e.target.value})} className="w-full px-6 py-4 bg-white border border-slate-200 rounded-2xl font-black text-slate-700 text-xs shadow-sm"><option value="2025">2025</option><option value="2026">2026</option></select></div>
+        <div className="p-10 border-b border-slate-100 bg-slate-50/40 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade Hospitalar</label>
+            <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
+              <button onClick={() => setSelectedUnit('Belém')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Belém' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Belém</button>
+              <button onClick={() => setSelectedUnit('Barcarena')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Barcarena' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Barcarena</button>
+            </div>
+          </div>
+          <div className="flex items-end">
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 w-full flex items-center gap-4">
+              <span className="text-2xl filter drop-shadow-sm">🛡️</span>
+              <p className="text-[10px] font-bold text-blue-800 leading-tight uppercase">Security Fallback: Uso automático de logo padrão em caso de erro na nuvem.</p>
+            </div>
+          </div>
         </div>
+        
         <div className="overflow-x-auto">
             <table className="w-full text-left">
                 <thead className="bg-white border-b border-slate-100">
@@ -331,30 +356,47 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                    {reportItems.map(item => (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
-                            <td className="py-10 px-12">
-                                <p className="font-black text-slate-800 text-xl uppercase tracking-tight">{item.name}</p>
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 flex items-center gap-2"><MapPin size={12}/> ID: {item.code}</p>
-                            </td>
-                            <td className="py-10 px-4 text-center">
-                                <span className="font-black text-slate-800 text-2xl">{item.numerator} / {item.denominator}</span>
-                            </td>
-                            <td className="py-10 px-4 min-w-[240px]">
-                                <div className="flex items-center gap-6">
-                                    <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden border border-slate-200 shadow-inner">
-                                        <div className={`h-full transition-all duration-1000 ${item.coverage_percent >= 80 ? 'bg-green-500' : 'bg-orange-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }}></div>
+                    {reportItems.map(item => {
+                        const isThisGenerating = generatingId === item.id;
+                        return (
+                            <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
+                                <td className="py-10 px-12">
+                                    <p className="font-black text-slate-800 text-xl uppercase tracking-tight">{item.name}</p>
+                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 flex items-center gap-2">
+                                        <span className="text-sm">📍</span> ID: {item.code}
+                                    </p>
+                                </td>
+                                <td className="py-10 px-4 text-center">
+                                    <span className="font-black text-slate-800 text-2xl">{item.numerator} / {item.denominator}</span>
+                                </td>
+                                <td className="py-10 px-4 min-w-[240px]">
+                                    <div className="flex items-center gap-6">
+                                        <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden border border-slate-200 shadow-inner">
+                                            <div className={`h-full transition-all duration-1000 ${item.coverage_percent >= 80 ? 'bg-green-500' : 'bg-orange-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }}></div>
+                                        </div>
+                                        <span className={`text-base font-black ${item.coverage_percent >= 80 ? 'text-green-600' : 'text-orange-600'}`}>{item.coverage_percent.toFixed(1)}%</span>
                                     </div>
-                                    <span className={`text-base font-black ${item.coverage_percent >= 80 ? 'text-green-600' : 'text-orange-600'}`}>{item.coverage_percent.toFixed(1)}%</span>
-                                </div>
-                            </td>
-                            <td className="py-10 px-12 text-right">
-                                <button onClick={() => handleSingleExport(item)} disabled={isGenerating} className="bg-white border-2 border-slate-200 text-slate-700 px-8 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:border-blue-600 hover:text-white transition-all shadow-md inline-flex items-center gap-3 disabled:opacity-50">
-                                    {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} Emitir PDF
-                                </button>
-                            </td>
-                        </tr>
-                    ))}
+                                </td>
+                                <td className="py-10 px-12 text-right">
+                                    <button 
+                                        onClick={() => handleSingleExport(item)} 
+                                        disabled={isBusy} 
+                                        className={`
+                                            px-8 py-4 rounded-[1.5rem] text-[10px] font-black uppercase tracking-widest transition-all shadow-sm inline-flex items-center gap-3 border-2
+                                            ${isThisGenerating 
+                                                ? 'bg-rose-50 border-rose-200 text-rose-700 animate-pulse cursor-wait' 
+                                                : 'bg-white border-slate-100 text-slate-600 hover:bg-white hover:border-rose-300 hover:text-rose-600 hover:shadow-md hover:-translate-y-0.5'
+                                            }
+                                            ${isBusy && !isThisGenerating ? 'opacity-30 grayscale cursor-not-allowed' : ''}
+                                        `}
+                                    >
+                                        {isThisGenerating ? <Loader2 size={16} className="animate-spin text-rose-600" /> : <span className="text-lg filter drop-shadow-sm">📄</span>} 
+                                        {isThisGenerating ? "Gerando..." : "Emitir PDF"}
+                                    </button>
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>

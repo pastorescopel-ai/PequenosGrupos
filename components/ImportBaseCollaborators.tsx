@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { UserCircle2, ScanText, CheckCircle, UploadCloud, Database, Search, Trash2, Building2, UserX, UserCheck, AlertCircle, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { writeBatch, doc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Collaborator, HospitalUnit, Sector } from '../types';
@@ -189,13 +189,13 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
       <header className="flex justify-between items-start">
         <div>
           <h4 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-            <UserCircle2 className="text-blue-600" size={28}/> Base Oficial de Colaboradores
+            <span className="text-3xl filter drop-shadow-sm">👤</span> Base Oficial de Colaboradores
           </h4>
           <p className="text-slate-500 text-sm mt-1">Sincronização master de integrantes ativos no hospital.</p>
         </div>
         <div className="flex items-center gap-4">
            <div className="flex items-center gap-3 bg-blue-50 px-5 py-2 rounded-2xl border border-blue-100">
-             <Database size={18} className="text-blue-600"/>
+             <span className="text-xl">🗃️</span>
              <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">
                {allCollaborators.length} Registros
              </span>
@@ -212,7 +212,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
               !isBarcarena ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <Building2 size={16} /> HAB (Belém)
+            <span className="text-lg">🏥</span> HAB (Belém)
           </button>
           <button
             onClick={() => setTargetUnit('Barcarena')}
@@ -220,7 +220,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
               isBarcarena ? 'bg-white text-indigo-600 shadow-md ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <Building2 size={16} /> HABA (Barcarena)
+            <span className="text-lg">🏥</span> HABA (Barcarena)
           </button>
         </div>
       </div>
@@ -237,7 +237,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           >
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".csv,.txt" className="hidden" />
             <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform ${isBarcarena ? 'bg-indigo-50 text-indigo-600' : 'bg-blue-50 text-blue-600'}`}>
-               <UploadCloud size={32} />
+               <span className="text-4xl filter drop-shadow-sm">☁️</span>
             </div>
             <p className="font-black text-slate-800 mb-2 text-sm">Upload Arquivo {targetUnit}</p>
             <p className="text-xs text-slate-500 font-medium px-4 leading-relaxed">Arraste seu arquivo ou clique para selecionar.</p>
@@ -257,7 +257,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           <div className="flex justify-end gap-4">
             {result && (
               <div className="flex items-center gap-3 px-6 py-2 bg-green-50 text-green-700 rounded-2xl border border-green-100 animate-in zoom-in-95">
-                <CheckCircle size={18}/> 
+                <span className="text-lg">✅</span>
                 <span className="text-xs font-black uppercase tracking-widest">{result.total} Salvos em {result.unit}</span>
               </div>
             )}
@@ -268,7 +268,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
                   isBarcarena ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
               }`}
             >
-              {isProcessing ? 'Processando...' : <><ScanText size={20} /> Processar para {targetUnit}</>}
+              {isProcessing ? 'Processando...' : <><span className="text-lg">📥</span> Processar para {targetUnit}</>}
             </button>
           </div>
         </div>
@@ -279,7 +279,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
           <h4 className="text-xl font-black text-slate-800">Base Atual Consolidada</h4>
           <div className="relative w-full max-w-md">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg filter grayscale opacity-50">🔍</span>
             <input 
               type="text" 
               placeholder="Buscar colaborador..." 
@@ -313,17 +313,17 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
                        <ActionTooltip content={collab.active ? "Inativar: Revoga acessos e remove do PG." : "Reativar: Habilita apenas como colaborador base."}>
                          <button 
                            onClick={() => setItemToToggle(collab)}
-                           className={`p-2 rounded-lg transition-all ${collab.active ? 'text-slate-300 hover:text-orange-500 hover:bg-orange-50' : 'text-orange-500 bg-orange-50 hover:bg-orange-100'}`}
+                           className={`p-2 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110`}
                          >
-                            {collab.active ? <UserX size={16}/> : <UserCheck size={16}/>}
+                            {collab.active ? '🟢' : '🔴'}
                          </button>
                        </ActionTooltip>
                        <ActionTooltip content="Excluir Definitivamente">
                          <button 
                            onClick={() => setItemToDelete({id: collab.id, name: collab.full_name})}
-                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
                          >
-                            <Trash2 size={16}/>
+                            🗑️
                          </button>
                        </ActionTooltip>
                     </td>
@@ -382,7 +382,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
             confirmText={itemToToggle.active ? "Confirmar Inativação" : "Reativar Cadastro"}
             cancelText="Cancelar"
             variant={itemToToggle.active ? "warning" : "success"}
-            icon={itemToToggle.active ? <AlertCircle size={36}/> : <CheckCircle size={36}/>}
+            icon={<span className="text-4xl">{itemToToggle.active ? '⚠️' : '✅'}</span>}
          />
       )}
 

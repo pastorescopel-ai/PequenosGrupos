@@ -84,6 +84,7 @@ const MainContent: React.FC<MainContentProps> = ({
             onUpdateSchedule={updateSchedule} 
             members={members} 
             photos={pgPhotos}
+            leaders={leaders}
           />;
 
     case 'chaplain-scale':

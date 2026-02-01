@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { UserCircle2, Building2, Network, ShieldCheck } from 'lucide-react';
 import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import ImportBaseCollaborators from './ImportBaseCollaborators';
@@ -29,10 +28,10 @@ const ImportCollaborators: React.FC<ImportCollaboratorsProps> = ({
   const [activeImport, setActiveImport] = useState<ImportType>('collaborators');
 
   const tabs = [
-    { id: 'collaborators', label: 'Base RH', icon: <UserCircle2 size={18} /> },
-    { id: 'pgs', label: 'Lista PGs', icon: <Network size={18} /> },
-    { id: 'chaplains', label: 'Capelães', icon: <ShieldCheck size={18} /> },
-    { id: 'sectors', label: 'Setores', icon: <Building2 size={18} /> },
+    { id: 'collaborators', label: 'Base RH', icon: <span className="text-lg">👥</span> },
+    { id: 'pgs', label: 'Lista PGs', icon: <span className="text-lg">🕸️</span> },
+    { id: 'chaplains', label: 'Capelães', icon: <span className="text-lg">🛡️</span> },
+    { id: 'sectors', label: 'Setores', icon: <span className="text-lg">🏢</span> },
   ];
 
   // --- HANDLERS DE PERSISTÊNCIA PARA CAPELÃES ---
@@ -78,7 +77,7 @@ const ImportCollaborators: React.FC<ImportCollaboratorsProps> = ({
           <button 
             key={tab.id} 
             onClick={() => setActiveImport(tab.id as ImportType)} 
-            className={`flex items-center gap-2 px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
+            className={`flex items-center gap-3 px-8 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
               activeImport === tab.id ? 'bg-white text-blue-700 shadow-md' : 'text-slate-500 hover:bg-white/50'
             }`}
           >

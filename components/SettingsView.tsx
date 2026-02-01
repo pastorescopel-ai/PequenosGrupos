@@ -3,11 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Save, 
   CheckCircle,
-  UploadCloud,
-  PenTool,
   Loader2,
-  Layout,
-  Trash2,
   Palette
 } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -137,7 +133,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
         <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="md:col-span-2">
                 <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3 uppercase tracking-tight">
-                    <PenTool className="text-blue-600" /> Assinatura Ministerial
+                    <span className="text-2xl filter drop-shadow-sm">✒️</span> Assinatura Ministerial
                 </h3>
             </div>
             <div className="space-y-2">
@@ -161,13 +157,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
                             <img src={localSettings.signature_url} className="h-20 object-contain" alt="Assinatura" />
                         ) : (
                             <div className="text-center">
-                                <UploadCloud className="text-slate-300 mx-auto mb-2" size={32} />
-                                <p className="text-[10px] font-bold text-slate-400">UPLOAD ASSINATURA</p>
+                                <span className="text-3xl filter drop-shadow-sm opacity-50">☁️</span>
+                                <p className="text-[10px] font-bold text-slate-400 mt-2">UPLOAD ASSINATURA</p>
                             </div>
                         )}
                     </div>
                     {localSettings.signature_url && (
-                        <button type="button" onClick={() => setFileToRemove('signature_url')} className="absolute top-2 right-2 p-2 bg-red-100 text-red-600 rounded-full shadow-sm hover:bg-red-200 transition-colors"><Trash2 size={16} /></button>
+                        <button type="button" onClick={() => setFileToRemove('signature_url')} className="absolute top-2 right-2 p-2 bg-red-100 text-red-600 rounded-full shadow-sm hover:bg-red-200 transition-colors"><span className="text-sm">🗑️</span></button>
                     )}
                 </div>
             </div>
@@ -176,7 +172,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
         <div className="bg-white p-10 rounded-[4rem] border border-slate-200 shadow-sm space-y-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <h3 className="text-2xl font-black text-slate-800 flex items-center gap-4 uppercase tracking-tight">
-                    <Layout className="text-blue-600" size={32}/> Engenharia Visual A4
+                    <span className="text-3xl filter drop-shadow-sm">📐</span> Engenharia Visual A4
                 </h3>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
                     <button type="button" onClick={() => setActiveUnitTab('Belém')} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeUnitTab === 'Belém' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Belém</button>
@@ -205,13 +201,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        <UploadCloud className="text-slate-300 mx-auto" />
+                                        <span className="text-3xl filter drop-shadow-sm opacity-50">☁️</span>
                                         <p className="text-[9px] font-black text-slate-500 uppercase">Upload Logo {activeUnitTab}</p>
                                     </div>
                                 )}
                             </div>
                             {(activeUnitTab === 'Belém' ? localSettings.template_belem_url : localSettings.template_barcarena_url) && (
-                                <button type="button" onClick={() => setFileToRemove(activeUnitTab === 'Belém' ? 'template_belem_url' : 'template_barcarena_url')} className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-lg shadow-sm hover:bg-red-100 transition-colors"><Trash2 size={14} /></button>
+                                <button type="button" onClick={() => setFileToRemove(activeUnitTab === 'Belém' ? 'template_belem_url' : 'template_barcarena_url')} className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-lg shadow-sm hover:bg-red-100 transition-colors"><span className="text-sm">🗑️</span></button>
                             )}
                         </div>
                     </div>
@@ -241,13 +237,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
                                     <img src={activeUnitTab === 'Belém' ? localSettings.footer_belem_url : localSettings.footer_barcarena_url} className="h-16 mx-auto object-contain" alt="Footer" />
                                 ) : (
                                     <div className="space-y-2">
-                                        <UploadCloud className="text-slate-300 mx-auto" />
+                                        <span className="text-3xl filter drop-shadow-sm opacity-50">☁️</span>
                                         <p className="text-[9px] font-black text-slate-500 uppercase">Upload Rodapé {activeUnitTab}</p>
                                     </div>
                                 )}
                             </div>
                             {(activeUnitTab === 'Belém' ? localSettings.footer_belem_url : localSettings.footer_barcarena_url) && (
-                                <button type="button" onClick={() => setFileToRemove(activeUnitTab === 'Belém' ? 'footer_belem_url' : 'footer_barcarena_url')} className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-lg shadow-sm hover:bg-red-100 transition-colors"><Trash2 size={14} /></button>
+                                <button type="button" onClick={() => setFileToRemove(activeUnitTab === 'Belém' ? 'footer_belem_url' : 'footer_barcarena_url')} className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-500 rounded-lg shadow-sm hover:bg-red-100 transition-colors"><span className="text-sm">🗑️</span></button>
                             )}
                         </div>
                     </div>

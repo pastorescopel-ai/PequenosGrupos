@@ -205,7 +205,23 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
           <button onClick={() => setManagingLeader(null)} className="bg-blue-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">Encerrar Gestão</button>
         </div>
         {/* Added cast to Collaborator[] for empty members array to fix type mismatch */}
-        <LeaderDashboard user={managingLeader} memberRequests={memberRequests} photos={photos} onUpdateSchedule={() => {}} members={[] as Collaborator[]} />
+        <LeaderDashboard 
+            user={managingLeader} 
+            memberRequests={memberRequests} 
+            photos={photos} 
+            onUpdateSchedule={() => {}} 
+            members={[] as Collaborator[]} 
+            onUpdateUser={async (data) => {
+                if (managingLeader) {
+                    try {
+                        await updateDoc(doc(db, "leaders", managingLeader.id), data);
+                        setManagingLeader(prev => prev ? { ...prev, ...data } : null);
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+            }}
+        />
       </div>
     );
   }

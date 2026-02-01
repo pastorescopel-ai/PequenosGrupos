@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { History, CalendarPlus, CheckCircle2, AlertCircle, Calendar, ArrowRight, XCircle, Info } from 'lucide-react';
+import { History, CalendarPlus, CheckCircle2 } from 'lucide-react';
 import { Leader, ChangeRequest, MeetingSchedule, Chaplain, Collaborator, PGMeetingPhoto } from '../types';
 import MeetingScheduleModal from './MeetingScheduleModal';
 import DashboardStats from './DashboardStats';
@@ -15,21 +15,46 @@ interface LeaderDashboardProps {
   onUpdateSchedule: (schedule: Partial<MeetingSchedule>) => void;
   members: Collaborator[];
   photos?: PGMeetingPhoto[];
+  leaders?: Leader[]; 
 }
 
 const LeaderDashboard: React.FC<LeaderDashboardProps> = ({ 
-  user, onUpdateUser, memberRequests, meetingSchedule, allSchedules, chaplains = [], onUpdateSchedule, members, photos = []
+  user, onUpdateUser, memberRequests, meetingSchedule, allSchedules, chaplains = [], onUpdateSchedule, members, photos = [], leaders = []
 }) => {
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
 
   const isBelem = user.hospital === 'Belém';
 
   const coveragePercent = useMemo(() => {
-    const sectorMembers = members.filter(m => m.sector_name === user.sector_name && m.active !== false && m.employee_id !== user.employee_id);
-    const totalActiveInPG = sectorMembers.length + 1;
+    const activeMembersInSector = members.filter(m => m.sector_name === user.sector_name && m.active !== false);
+    const activeLeadersInSector = leaders.filter(l => l.sector_name === user.sector_name && l.active);
+    
+    const uniqueParticipantsIds = new Set([
+      ...activeMembersInSector.map(m => m.employee_id),
+      ...activeLeadersInSector.map(l => l.employee_id)
+    ]);
+
+    const totalActiveInSector = uniqueParticipantsIds.size;
     const denominator = 20; 
-    return Math.min((totalActiveInPG / denominator) * 100, 100);
-  }, [members, user.sector_name, user.employee_id]);
+    
+    return Math.min((totalActiveInSector / denominator) * 100, 100);
+  }, [members, leaders, user.sector_name]);
+
+  const activeMembersCount = useMemo(() => {
+      return members.filter(m => (m as any).pg_name === user.pg_name && m.active !== false).length;
+  }, [members, user.pg_name]);
+
+  const myRequestsCount = useMemo(() => {
+      return memberRequests.filter(r => r.leader_id === user.id).length;
+  }, [memberRequests, user.id]);
+
+  const myPhotosCount = useMemo(() => {
+      return photos.filter(p => p.leader_id === user.id).length;
+  }, [photos, user.id]);
+
+  const myVisitsCount = useMemo(() => {
+      return allSchedules ? allSchedules.filter(s => s.leader_id === user.id && (s.chaplain_status === 'confirmed' || s.chaplain_status === 'pending')).length : 0;
+  }, [allSchedules, user.id]);
 
   const nextMeetingDate = meetingSchedule ? new Date(meetingSchedule.full_date) : null;
   const isMeetingScheduled = nextMeetingDate && nextMeetingDate > new Date();
@@ -50,13 +75,37 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       
+      {/* --- EMOJI STATS GRID --- */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <ProStatCard 
+             label="Membros Ativos" 
+             value={activeMembersCount} 
+             emoji="👥" 
+          />
+          <ProStatCard 
+             label="Encontros (Fotos)" 
+             value={myPhotosCount} 
+             emoji="📸" 
+          />
+          <ProStatCard 
+             label="Solicitações" 
+             value={myRequestsCount} 
+             emoji="📝" 
+          />
+          <ProStatCard 
+             label="Visitas Pastorais" 
+             value={myVisitsCount} 
+             emoji="🤝" 
+          />
+      </div>
+
       <div className="w-full">
          {dashboardMode === 'UNAVAILABLE' && (
-            <div className="bg-slate-100 border border-slate-200 rounded-[3rem] p-10 text-slate-500 shadow-inner relative overflow-hidden">
-                <Info size={200} className="absolute -right-10 -bottom-10 text-slate-200/50 rotate-12" />
+            <div className="bg-slate-100 border border-slate-200 rounded-[2.5rem] p-10 text-slate-500 shadow-inner relative overflow-hidden">
+                <div className="absolute -right-5 -bottom-5 text-[150px] opacity-10 filter grayscale">ℹ️</div>
                 <div className="relative z-10">
                     <div className="inline-flex items-center gap-2 bg-slate-200 px-4 py-2 rounded-full mb-4">
-                        <Info size={16} className="text-slate-400" />
+                        <span className="text-base">📍</span>
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Unidade {user.hospital}</span>
                     </div>
                     <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-800 mb-4">Agenda em Breve</h2>
@@ -68,11 +117,11 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
          )}
 
          {dashboardMode === 'DECLINED' && (
-            <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-[3rem] p-10 text-white shadow-2xl shadow-red-200 relative overflow-hidden">
-                <XCircle size={200} className="absolute -right-10 -bottom-10 text-white/10 rotate-12" />
+            <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-[2.5rem] p-10 text-white shadow-2xl shadow-red-200 relative overflow-hidden">
+                <div className="absolute -right-5 -bottom-5 text-[150px] opacity-20">🚫</div>
                 <div className="relative z-10">
                     <div className="inline-flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full mb-4 backdrop-blur-sm">
-                        <AlertCircle size={16} className="text-white" />
+                        <span className="text-base">⚠️</span>
                         <span className="text-[10px] font-black uppercase tracking-widest">Solicitação Recusada</span>
                     </div>
                     <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4">Agenda Não Confirmada</h2>
@@ -90,42 +139,50 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
          )}
 
          {dashboardMode === 'PLAN' && (
-            <div className="bg-white border border-slate-200 rounded-[3rem] p-10 shadow-sm relative overflow-hidden group hover:border-blue-400 transition-all">
-                <Calendar size={200} className="absolute -right-10 -bottom-10 text-slate-50 group-hover:text-blue-50 transition-colors rotate-12" />
+            <div className="bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+                <div className="absolute -right-8 -bottom-8 text-[180px] opacity-10 group-hover:opacity-20 transition-opacity filter drop-shadow-sm select-none">🗓️</div>
                 <div className="relative z-10 flex flex-col items-start">
-                    <div className="inline-flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full mb-4">
-                        <CalendarPlus size={16} className="text-slate-500" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Planejamento</span>
+                    <div className="inline-flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-full mb-6 border border-slate-100">
+                        <span className="text-base">📌</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Próximo Encontro</span>
                     </div>
-                    <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-800 mb-2">Próximo Encontro</h2>
-                    <p className="text-slate-500 font-medium text-lg max-w-xl mb-8">
-                        {isMeetingScheduled 
-                            ? `Tudo certo! Agendado para ${nextMeetingDate?.toLocaleDateString()} às ${nextMeetingDate?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}.`
-                            : 'Você ainda não definiu a data do encontro desta semana. Vamos agendar?'}
-                    </p>
                     
                     {isMeetingScheduled ? (
-                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                            <button 
-                                onClick={handleConfirmSchedule}
-                                className="flex-1 sm:flex-none bg-green-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-green-700 shadow-xl shadow-green-100 transition-all active:scale-95"
-                            >
-                                <CheckCircle2 size={18} /> Confirmar Agenda
-                            </button>
+                        <>
+                            <h2 className="text-4xl md:text-5xl font-black tracking-tight text-slate-800 mb-2">
+                                {nextMeetingDate?.toLocaleDateString('pt-BR', {day: '2-digit', month: 'long'})}
+                            </h2>
+                            <p className="text-xl font-bold text-slate-400 mb-8 flex items-center gap-2">
+                                às {nextMeetingDate?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                                <button 
+                                    onClick={handleConfirmSchedule}
+                                    className="flex-1 sm:flex-none bg-green-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-green-700 shadow-xl shadow-green-100 transition-all active:scale-95"
+                                >
+                                    <CheckCircle2 size={18} /> Confirmar
+                                </button>
+                                <button 
+                                    onClick={() => setIsEditingMeeting(true)}
+                                    className="flex-1 sm:flex-none bg-white border-2 border-slate-100 text-slate-400 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 hover:text-slate-600 transition-all"
+                                >
+                                     Alterar
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-800 mb-4">Não Agendado</h2>
+                            <p className="text-slate-400 font-medium mb-8 max-w-md">
+                                Defina a data e horário do encontro desta semana para notificar os membros.
+                            </p>
                             <button 
                                 onClick={() => setIsEditingMeeting(true)}
-                                className="flex-1 sm:flex-none bg-white border border-slate-200 text-slate-500 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-slate-50 hover:text-blue-600 transition-all hover:border-blue-200"
+                                className="bg-blue-950 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-black transition-all shadow-xl"
                             >
-                                 Alterar
+                                <CalendarPlus size={20} /> Agendar Agora
                             </button>
-                        </div>
-                    ) : (
-                        <button 
-                            onClick={() => setIsEditingMeeting(true)}
-                            className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-blue-700 hover:scale-105 transition-all shadow-xl shadow-blue-200"
-                        >
-                            <CalendarPlus size={20} /> Agendar Encontro
-                        </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -139,22 +196,26 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
         />
       </div>
 
-      <section className="bg-slate-50 p-10 rounded-[3rem] border border-slate-200/50">
-        <h3 className="text-xl font-black text-slate-800 flex items-center gap-4 mb-6">
-            <History className="text-slate-400"/> Atividades Recentes
+      <section className="bg-slate-100 p-10 rounded-[2.5rem] border border-slate-200/50">
+        <h3 className="text-lg font-black text-slate-800 flex items-center gap-3 mb-6 uppercase tracking-widest">
+            <History className="text-slate-400" size={20}/> Atividades Recentes
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-           {memberRequests.filter(r => r.leader_id === user.id).slice(0, 3).map(req => (
-             <div key={req.id} className="p-5 bg-white rounded-3xl border border-slate-100 flex items-center gap-4 shadow-sm">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${req.type === 'add' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
-                    {req.type === 'add' ? <ArrowRight size={18} className="-rotate-45"/> : <ArrowRight size={18} className="rotate-45"/>}
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800 text-sm">{req.collaborator_name}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">{req.type === 'add' ? 'Admissão' : 'Desligamento'} • {req.status}</p>
-                </div>
-             </div>
-           ))}
+           {memberRequests.filter(r => r.leader_id === user.id).length === 0 ? (
+               <div className="col-span-full text-center py-8 text-slate-400 font-bold italic">Nenhuma atividade registrada.</div>
+           ) : (
+               memberRequests.filter(r => r.leader_id === user.id).slice(0, 3).map(req => (
+                 <div key={req.id} className="p-6 bg-white rounded-3xl border border-slate-200 flex items-center gap-5 shadow-sm">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl`}>
+                        {req.type === 'add' ? '📥' : '📤'}
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 text-sm">{req.collaborator_name}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{req.type === 'add' ? 'Admissão' : 'Desligamento'} • {req.status}</p>
+                    </div>
+                 </div>
+               ))
+           )}
         </div>
       </section>
 
@@ -171,5 +232,17 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
     </div>
   );
 };
+
+const ProStatCard = ({ label, value, emoji }: any) => (
+    <div className="bg-white border border-slate-100 p-6 rounded-[2rem] flex flex-col items-center justify-center gap-4 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_24px_rgba(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300">
+        <div className="text-3xl filter drop-shadow-sm mb-1">
+            {emoji}
+        </div>
+        <div className="text-center">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{label}</p>
+            <p className="text-4xl font-black text-slate-800 leading-none">{value}</p>
+        </div>
+    </div>
+);
 
 export default LeaderDashboard;

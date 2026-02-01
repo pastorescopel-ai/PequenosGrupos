@@ -4,7 +4,7 @@ import {
   FileText, LayoutDashboard, Upload, Settings, UserCog, Hospital, UsersRound, Camera, CalendarCheck, 
   RefreshCw
 } from 'lucide-react';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
 import { Leader, ChangeRequest, ReportSettings, PGMeetingPhoto, MeetingSchedule, Chaplain, Sector, Collaborator, PG } from './types';
@@ -53,12 +53,43 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
       try { await action(); } catch(e) { console.error(e); }
   };
 
+  const handleUpdateUser = async (data: Partial<Leader>) => {
+      // In a real scenario, this would likely update context or trigger a refresh
+      // Since PGModule handles its own state for lists but not the authenticated user directly (passed as prop),
+      // we can stub this or update firestore.
+      if (authenticatedUser && db) {
+          try {
+              await updateDoc(doc(db, "leaders", authenticatedUser.id), data);
+          } catch(e) {
+              console.error(e);
+          }
+      }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
         return authenticatedUser.role === 'ADMIN' 
-          ? <AdminDashboard meetingSchedules={meetingSchedules} onNavigateToScale={() => setActiveTab('chaplain-scale')} leaders={leaders} members={members} sectors={sectors} /> 
-          : <LeaderDashboard user={authenticatedUser} memberRequests={memberRequests} photos={pgPhotos} chaplains={chaplains} meetingSchedule={meetingSchedules.filter(s => s.leader_id === authenticatedUser.id)[0]} allSchedules={meetingSchedules} onUpdateSchedule={(s) => setMeetingSchedules([...meetingSchedules, s as MeetingSchedule])} members={members} />;
+          ? <AdminDashboard 
+              user={authenticatedUser}
+              onUpdateUser={handleUpdateUser}
+              meetingSchedules={meetingSchedules} 
+              onNavigateToScale={() => setActiveTab('chaplain-scale')} 
+              leaders={leaders} 
+              members={members} 
+              sectors={sectors} 
+            /> 
+          : <LeaderDashboard 
+              user={authenticatedUser} 
+              onUpdateUser={handleUpdateUser}
+              memberRequests={memberRequests} 
+              photos={pgPhotos} 
+              chaplains={chaplains} 
+              meetingSchedule={meetingSchedules.filter(s => s.leader_id === authenticatedUser.id)[0]} 
+              allSchedules={meetingSchedules} 
+              onUpdateSchedule={(s) => setMeetingSchedules([...meetingSchedules, s as MeetingSchedule])} 
+              members={members} 
+            />;
       case 'chaplain-scale':
         return (authenticatedUser.role === 'ADMIN' || authenticatedUser.role === 'CAPELAO') ? <ChaplainScale meetingSchedules={meetingSchedules} chaplains={chaplains} onChaplainAction={(lid, act, aid) => {}} /> : null;
       case 'members':
@@ -80,7 +111,6 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
           }} 
           memberRequests={memberRequests} members={members} setMembers={setMembers} allCollaborators={allCollaborators} />;
       case 'reports':
-        // Added missing 'leaders' prop to ReportCoverage component fix
         return <ReportCoverage 
           isAdmin={authenticatedUser.role === 'ADMIN'} 
           user={authenticatedUser} 

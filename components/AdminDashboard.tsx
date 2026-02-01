@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   TrendingUp, 
   Users, 
@@ -40,22 +40,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const pendingRequests = meetingSchedules.filter(s => s.request_chaplain && s.chaplain_status === 'pending');
   const pendingMembers = memberRequests.filter(r => r.status === 'pending');
-  const activeLeadersCount = leaders.filter(l => l.active).length;
-  const totalMembersCount = members.length;
-  const sectorsCount = sectors.length;
+  const activeLeaders = leaders.filter(l => l.active);
+  const activeMembers = members.filter(m => m.active !== false);
 
-  const sectorsWithMembers = sectors.filter(s => members.some(m => m.sector_name === s.name)).length;
-  const coveragePercent = sectorsCount > 0 ? (sectorsWithMembers / sectorsCount) * 100 : 0;
+  const totalActiveParticipants = useMemo(() => {
+    const combined = [
+      ...activeMembers.map(m => m.employee_id),
+      ...activeLeaders.map(l => l.employee_id)
+    ];
+    return new Set(combined).size;
+  }, [activeMembers, activeLeaders]);
+
+  const sectorsCount = sectors.length;
+  const sectorsWithPGs = sectors.filter(s => 
+    members.some(m => m.sector_name === s.name && m.active !== false) ||
+    leaders.some(l => l.sector_name === s.name && l.active)
+  ).length;
+
+  const coveragePercent = sectorsCount > 0 ? (sectorsWithPGs / sectorsCount) * 100 : 0;
 
   const unitsData = [
     { 
       name: 'Belém', 
-      members: members.filter(m => leaders.find(l => l.full_name === m.full_name)?.hospital === 'Belém' || true).length, 
+      count: activeMembers.filter(m => m.hospital === 'Belém').length + activeLeaders.filter(l => l.hospital === 'Belém').length,
       color: 'bg-blue-600' 
     },
     { 
       name: 'Barcarena', 
-      members: 0,
+      count: activeMembers.filter(m => m.hospital === 'Barcarena').length + activeLeaders.filter(l => l.hospital === 'Barcarena').length,
       color: 'bg-indigo-500' 
     },
   ];
@@ -64,8 +76,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     <div className="space-y-10 animate-in fade-in duration-700">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Dashboard Analítico</h2>
-          <p className="text-slate-500">Monitoramento baseado nos dados atuais de simulação.</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Visão Geral</h2>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Monitoramento Master</p>
         </div>
       </header>
 
@@ -111,33 +123,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <StatCard label="Total Membros" value={totalMembersCount.toString()} sub="Cadastrados na sessão" icon={<Users size={20}/>} trend="up" />
-        <StatCard label="Líderes Ativos" value={activeLeadersCount.toString()} sub="Acessos habilitados" icon={<Activity size={20}/>} trend="up" />
-        <StatCard label="Média de Cobertura" value={`${coveragePercent.toFixed(1)}%`} sub="Sectores c/ PGs" icon={<Target size={20}/>} trend={coveragePercent >= 80 ? 'up' : 'down'} />
-        <StatCard label="Setores Totais" value={sectorsCount.toString()} sub="Importados da base" icon={<Hospital size={20}/>} trend="up" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={32}/>} color="text-blue-600" />
+        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={32}/>} color="text-emerald-500" />
+        <StatCard label="Setores Ativos" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={32}/>} color="text-amber-500" />
+        <StatCard label="Setores Totais" value={sectorsCount.toString()} icon={<Hospital size={32}/>} color="text-slate-400" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
+        <div className="lg:col-span-2 bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-8">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-              <BarChart3 className="text-blue-600" size={24}/> Engajamento por Unidade
+            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest">
+              <BarChart3 className="text-slate-400" size={20}/> Participação por Unidade
             </h3>
           </div>
           <div className="space-y-10 py-4">
             {unitsData.map((unit) => {
-              const percent = totalMembersCount > 0 ? (unit.members / totalMembersCount) * 100 : 0;
+              const percent = totalActiveParticipants > 0 ? (unit.count / totalActiveParticipants) * 100 : 0;
               return (
                 <div key={unit.name} className="space-y-3">
                   <div className="flex justify-between items-end">
                     <div>
-                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{unit.name}</p>
-                      <p className="text-xl font-bold text-slate-800">{unit.members} Membros</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{unit.name}</p>
+                      <p className="text-xl font-black text-slate-800">{unit.count} Integrantes</p>
                     </div>
                     <p className="text-2xl font-black text-blue-600">{percent.toFixed(0)}%</p>
                   </div>
-                  <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="w-full h-3 bg-slate-50 rounded-full overflow-hidden">
                     <div className={`h-full ${unit.color} rounded-full transition-all duration-1000`} style={{ width: `${percent}%` }}></div>
                   </div>
                 </div>
@@ -146,16 +158,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
         
-        <div className="bg-blue-950 p-10 rounded-[3rem] text-white shadow-xl flex flex-col border border-blue-900 relative overflow-hidden">
+        <div className="bg-blue-950 p-10 rounded-[2.5rem] text-white shadow-xl flex flex-col border border-blue-900 relative overflow-hidden">
           <TrendingUp className="absolute -right-10 -bottom-10 text-white/5" size={200} />
-          <h3 className="text-lg font-bold mb-8 flex items-center gap-2 relative z-10">
-            <TrendingUp className="text-blue-400" size={20}/> Setores Recentes
+          <h3 className="text-xs font-black mb-8 flex items-center gap-2 relative z-10 uppercase tracking-widest text-blue-400">
+            <TrendingUp size={16}/> Top Setores
           </h3>
-          <div className="flex-1 space-y-6 relative z-10">
-            {sectors.slice(-5).map(s => (
-              <div key={s.id} className="flex items-center justify-between group">
-                <div><p className="text-sm font-bold group-hover:text-blue-400 transition-colors truncate max-w-[150px]">{s.name}</p></div>
-                <span className={`text-[10px] font-black uppercase text-blue-400`}>{s.code}</span>
+          <div className="flex-1 space-y-4 relative z-10">
+            {sectors.filter(s => leaders.some(l => l.sector_name === s.name && l.active)).slice(0, 6).map(s => (
+              <div key={s.id} className="flex items-center justify-between group py-2 border-b border-white/5 last:border-0">
+                <div><p className="text-sm font-bold group-hover:text-blue-300 transition-colors truncate max-w-[150px]">{s.name}</p></div>
+                <span className={`text-[9px] font-black uppercase text-blue-500 bg-blue-900/50 px-2 py-1 rounded`}>{s.code}</span>
               </div>
             ))}
             {sectors.length === 0 && <p className="text-blue-300/50 italic text-sm">Nenhum setor cadastrado.</p>}
@@ -166,17 +178,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
 };
 
-const StatCard = ({ label, value, sub, icon, trend }: any) => (
-  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:border-blue-100 transition-all">
-    <div className="flex justify-between items-start mb-4">
-      <div className="p-3 bg-slate-50 text-blue-600 rounded-2xl">{icon}</div>
-      <div className={`text-[10px] font-black uppercase ${trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
-        {trend === 'up' ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>}
-      </div>
+const StatCard = ({ label, value, icon, color }: any) => (
+  <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all flex flex-col items-center justify-center gap-3">
+    <div className={`${color} mb-1`}>{icon}</div>
+    <div className="text-center">
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{label}</p>
+        <p className="text-4xl font-black text-slate-800 leading-none">{value}</p>
     </div>
-    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-    <p className="text-3xl font-black text-slate-800 mb-2">{value}</p>
-    <p className="text-[10px] text-slate-500 font-medium italic">{sub}</p>
   </div>
 );
 
