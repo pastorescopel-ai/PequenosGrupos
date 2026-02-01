@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ScanText, UserMinus, UserCheck, Trash2, Edit3, Mail, Phone } from 'lucide-react';
+import { ScanText, Mail, Phone } from 'lucide-react';
 import { Chaplain } from '../types';
 import ActionTooltip from './ActionTooltip';
 
@@ -49,27 +49,27 @@ const ChaplainCard: React.FC<ChaplainCardProps> = ({ chaplain, onEdit, onToggle,
           <ActionTooltip content="Editar Dados do Capelão">
             <button
               onClick={() => onEdit(chaplain)}
-              className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+              className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all text-lg filter drop-shadow-sm hover:scale-110"
             >
-              <Edit3 size={18} />
+              ✏️
             </button>
           </ActionTooltip>
 
           <ActionTooltip content={chaplain.active ? "Inativar da escala" : "Ativar na escala"}>
             <button
               onClick={() => onToggle(chaplain.id)}
-              className={`p-2 rounded-xl transition-all ${chaplain.active ? 'text-slate-300 hover:text-orange-500 hover:bg-orange-50' : 'text-slate-300 hover:text-green-500 hover:bg-green-50'}`}
+              className={`p-2 rounded-xl transition-all text-lg filter drop-shadow-sm hover:scale-110`}
             >
-              {chaplain.active ? <UserMinus size={18} /> : <UserCheck size={18} />}
+              {chaplain.active ? '🔴' : '🟢'}
             </button>
           </ActionTooltip>
 
           <ActionTooltip content="Excluir Definitivamente">
             <button
               onClick={() => onRemove(chaplain.id, chaplain.name)}
-              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all text-lg filter drop-shadow-sm hover:scale-110"
             >
-              <Trash2 size={18} />
+              🗑️
             </button>
           </ActionTooltip>
         </div>

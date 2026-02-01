@@ -127,18 +127,25 @@ const LinkMemberModal: React.FC<LinkMemberModalProps> = ({
                   />
                </div>
 
-               {searchResults.length > 0 && (
+               {searchTerm.length > 1 && !selectedCollabFromRH && (
                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[140] max-h-48 overflow-y-auto custom-scrollbar">
-                    {searchResults.map(res => (
-                      <button key={res.employee_id} type="button" onClick={() => selectCollab(res)} className="w-full p-5 text-left hover:bg-blue-50 flex items-center gap-4 border-b border-slate-100 last:border-0 group">
-                         <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600">{res.full_name.charAt(0)}</div>
-                         <div className="flex-1">
-                            <p className="font-black text-slate-800 text-sm">{res.full_name}</p>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">{res.sector_name} • Matrícula: {res.employee_id}</p>
-                         </div>
-                         <Plus size={16} className="text-slate-300 group-hover:text-blue-500"/>
-                      </button>
-                    ))}
+                    {searchResults.length > 0 ? (
+                        searchResults.map(res => (
+                          <button key={res.employee_id} type="button" onClick={() => selectCollab(res)} className="w-full p-5 text-left hover:bg-blue-50 flex items-center gap-4 border-b border-slate-100 last:border-0 group">
+                             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600">{res.full_name.charAt(0)}</div>
+                             <div className="flex-1">
+                                <p className="font-black text-slate-800 text-sm">{res.full_name}</p>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase">{res.sector_name} • Matrícula: {res.employee_id}</p>
+                             </div>
+                             <Plus size={16} className="text-slate-300 group-hover:text-blue-500"/>
+                          </button>
+                        ))
+                    ) : (
+                        <div className="p-5 text-center">
+                            <p className="text-sm font-bold text-slate-500">Nenhum colaborador encontrado.</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Verifique se o nome está correto ou se a pessoa está na Base RH (Importação).</p>
+                        </div>
+                    )}
                  </div>
                )}
             </div>

@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, UserCog, ScanText, Search, Building, Plus, Phone, Users, UserCheck, Briefcase } from 'lucide-react';
-/* Import HospitalUnit to fix type mismatch in state */
-import { Leader, Collaborator, PG, HospitalUnit } from '../types';
+import { Leader, Collaborator, PG, HospitalUnit, Sector } from '../types';
 import HelpNote from './HelpNote';
 
 interface AddLeaderModalProps {
@@ -11,15 +10,22 @@ interface AddLeaderModalProps {
   allCollaborators: Collaborator[];
   pgs: PG[];
   leaders: Leader[];
+  sectors: Sector[];
 }
 
-const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCollaborators, pgs, leaders }) => {
+const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCollaborators, pgs, leaders, sectors }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Collaborator[]>([]);
   const [showResults, setShowResults] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Sector Autocomplete State
+  const [sectorSearch, setSectorSearch] = useState('');
+  const [sectorResults, setSectorResults] = useState<Sector[]>([]);
+  const [showSectorResults, setShowSectorResults] = useState(false);
 
-  /* Explicitly type formData to use HospitalUnit instead of narrowing to "Belém" */
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const sectorDropdownRef = useRef<HTMLDivElement>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -31,11 +37,14 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
     hospital: 'Belém' as HospitalUnit
   });
 
-  // Fecha o dropdown ao clicar fora
+  // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowResults(false);
+      }
+      if (sectorDropdownRef.current && !sectorDropdownRef.current.contains(event.target as Node)) {
+        setShowSectorResults(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -50,7 +59,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         c.active && 
         (c.full_name.toLowerCase().includes(lowerTerm) || 
          c.employee_id.includes(searchTerm))
-      ).slice(0, 5); // Limita a 5 resultados para performance
+      ).slice(0, 5);
       setSearchResults(filtered);
       setShowResults(true);
     } else {
@@ -59,17 +68,39 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
     }
   }, [searchTerm, formData.isExternal, allCollaborators]);
 
+  // Lógica de busca de Setores
+  useEffect(() => {
+    if (sectorSearch.length >= 1) {
+        const lower = sectorSearch.toLowerCase();
+        const filtered = sectors.filter(s => 
+            (s.hospital === formData.hospital || !s.hospital) && // Filtra pela unidade
+            (s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower))
+        ).slice(0, 5);
+        setSectorResults(filtered);
+        setShowSectorResults(true);
+    } else {
+        setSectorResults([]);
+        setShowSectorResults(false);
+    }
+  }, [sectorSearch, sectors, formData.hospital]);
+
   const handleSelectCollaborator = (collab: Collaborator) => {
     setFormData(prev => ({
       ...prev,
       name: collab.full_name,
       matricula: collab.employee_id,
       sector: collab.sector_name,
-      /* Fix: collab.hospital can be 'Barcarena', so formData must accept HospitalUnit */
       hospital: collab.hospital || prev.hospital
     }));
     setSearchTerm(collab.full_name);
+    setSectorSearch(collab.sector_name); // Preenche o setor também
     setShowResults(false);
+  };
+
+  const handleSelectSector = (sectorName: string) => {
+      setFormData(prev => ({ ...prev, sector: sectorName }));
+      setSectorSearch(sectorName);
+      setShowSectorResults(false);
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,7 +117,13 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
       alert("Por favor, selecione um Pequeno Grupo.");
       return;
     }
-    onSave(formData);
+    // Garante que o setor no form data seja o que está no input de busca se o usuário digitou e não selecionou
+    const finalData = { ...formData, sector: sectorSearch }; 
+    if (!finalData.sector) {
+        alert("O campo Setor é obrigatório.");
+        return;
+    }
+    onSave(finalData);
     onClose();
   };
 
@@ -199,19 +236,38 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
               </div>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="space-y-1.5" ref={sectorDropdownRef}>
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Setor Principal</label>
               <div className="relative">
                 <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                 <input 
                   type="text" 
-                  value={formData.sector}
-                  onChange={e => setFormData({...formData, sector: e.target.value})}
+                  value={sectorSearch}
+                  onChange={e => { setSectorSearch(e.target.value); setFormData({...formData, sector: e.target.value}); }}
                   required 
                   readOnly={!formData.isExternal}
                   className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10 ${!formData.isExternal && 'text-slate-500 bg-slate-50/50'}`}
-                  placeholder="Setor"
+                  placeholder="Busque o Setor..."
+                  onFocus={() => { if(formData.isExternal) setShowSectorResults(true); }}
                 />
+                
+                {showSectorResults && formData.isExternal && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
+                        {sectorResults.map(sec => (
+                            <button
+                                key={sec.id}
+                                type="button"
+                                onClick={() => handleSelectSector(sec.name)}
+                                className="w-full p-3 text-left hover:bg-slate-50 text-xs font-bold text-slate-700 border-b border-slate-50 last:border-0"
+                            >
+                                {sec.name}
+                            </button>
+                        ))}
+                        {sectorResults.length === 0 && (
+                            <div className="p-3 text-xs text-slate-400 italic text-center">Nenhum setor encontrado.</div>
+                        )}
+                    </div>
+                )}
               </div>
             </div>
 

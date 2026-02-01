@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   ScanText, 
@@ -12,7 +12,7 @@ import {
   IdCard,
   User
 } from 'lucide-react';
-import { Collaborator, InactivationReason, HospitalUnit } from '../types';
+import { Collaborator, InactivationReason, HospitalUnit, Sector } from '../types';
 import HelpNote from './HelpNote';
 import { ministerialInstructions } from '../instructions';
 import { MOTIVOS_ALTERACAO } from '../constants';
@@ -24,6 +24,7 @@ interface CollaboratorDetailModalProps {
   onRequestAction: (type: 'add' | 'remove', reasonId: string, justification: string, inactivationReason?: InactivationReason) => void;
   isAdmin?: boolean;
   onUpdate?: (updatedData: Partial<Collaborator>) => void;
+  sectors?: Sector[];
 }
 
 const CollaboratorDetailModal: React.FC<CollaboratorDetailModalProps> = ({ 
@@ -31,7 +32,8 @@ const CollaboratorDetailModal: React.FC<CollaboratorDetailModalProps> = ({
   onClose, 
   onRequestAction,
   isAdmin = false,
-  onUpdate
+  onUpdate,
+  sectors = []
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isAdminEditing, setIsAdminEditing] = useState(false);
@@ -46,6 +48,37 @@ const CollaboratorDetailModal: React.FC<CollaboratorDetailModalProps> = ({
     hospital: collaborator.hospital
   });
 
+  const [sectorSearch, setSectorSearch] = useState(collaborator.sector_name || '');
+  const [showSectorResults, setShowSectorResults] = useState(false);
+  const [sectorResults, setSectorResults] = useState<Sector[]>([]);
+  const sectorRef = useRef<HTMLDivElement>(null);
+
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+          if (sectorRef.current && !sectorRef.current.contains(event.target as Node)) {
+              setShowSectorResults(false);
+          }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Lógica de busca de setor
+  useEffect(() => {
+      if (isAdminEditing && sectorSearch) {
+          const lower = sectorSearch.toLowerCase();
+          const filtered = sectors.filter(s => 
+              (s.hospital === editForm.hospital || !s.hospital) &&
+              (s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower))
+          ).slice(0, 5);
+          setSectorResults(filtered);
+          setShowSectorResults(true);
+      } else {
+          setShowSectorResults(false);
+      }
+  }, [sectorSearch, editForm.hospital, sectors, isAdminEditing]);
+
   const handleActionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onRequestAction('remove', 'manual', justification, motivo as InactivationReason);
@@ -55,7 +88,8 @@ const CollaboratorDetailModal: React.FC<CollaboratorDetailModalProps> = ({
   const handleAdminSave = (e: React.FormEvent) => {
     e.preventDefault();
     if(onUpdate) {
-        onUpdate(editForm);
+        // Garante que o setor salvo é o que está no input
+        onUpdate({ ...editForm, sector_name: sectorSearch });
         onClose();
     }
   };
@@ -145,11 +179,32 @@ const CollaboratorDetailModal: React.FC<CollaboratorDetailModalProps> = ({
                          <input required type="text" value={editForm.employee_id} onChange={e => setEditForm({...editForm, employee_id: e.target.value})} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600" />
                       </div>
                    </div>
-                   <div className="space-y-1">
+                   <div className="space-y-1" ref={sectorRef}>
                       <label className="text-[9px] font-black text-slate-400 uppercase px-2">Setor</label>
                       <div className="relative">
                          <Building className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18}/>
-                         <input required type="text" value={editForm.sector_name} onChange={e => setEditForm({...editForm, sector_name: e.target.value})} className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600" />
+                         <input 
+                            required 
+                            type="text" 
+                            value={sectorSearch} 
+                            onChange={e => setSectorSearch(e.target.value)} 
+                            className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-600/5 focus:border-blue-600"
+                            placeholder="Busque o Setor..." 
+                         />
+                         {showSectorResults && (
+                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 max-h-40 overflow-y-auto">
+                                 {sectorResults.map(sec => (
+                                     <button
+                                         key={sec.id}
+                                         type="button"
+                                         onClick={() => { setSectorSearch(sec.name); setShowSectorResults(false); }}
+                                         className="w-full p-3 text-left hover:bg-slate-50 text-xs font-bold text-slate-700 border-b border-slate-50 last:border-0"
+                                     >
+                                         {sec.name}
+                                     </button>
+                                 ))}
+                             </div>
+                         )}
                       </div>
                    </div>
                    <div className="space-y-1">

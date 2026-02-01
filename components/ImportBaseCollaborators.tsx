@@ -1,11 +1,12 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { writeBatch, doc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { AlertTriangle, Pencil } from 'lucide-react';
+import { writeBatch, doc, deleteDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Collaborator, HospitalUnit, Sector } from '../types';
 import ConfirmModal from './ConfirmModal';
 import ActionTooltip from './ActionTooltip';
+import CollaboratorDetailModal from './CollaboratorDetailModal';
 
 interface ImportBaseCollaboratorsProps {
   allCollaborators: Collaborator[]; 
@@ -21,9 +22,10 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
   const [targetUnit, setTargetUnit] = useState<HospitalUnit>('Belém');
   const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
   const [itemToToggle, setItemToToggle] = useState<Collaborator | null>(null);
+  const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cache dos nomes de setores válidos para validação rápida
+  // Cache dos nomes de setores válidos para validação rápida e auto-correção
   const validSectorNames = useMemo(() => {
       return new Set(sectors.map(s => s.name.trim().toLowerCase()));
   }, [sectors]);
@@ -46,7 +48,23 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
 
         const matricula = parts[0]?.trim() || '000';
         const nome = parts[1]?.trim().toUpperCase() || 'SEM NOME';
-        const setor = parts[2]?.trim() || 'GERAL';
+        let setor = parts[2]?.trim() || 'GERAL';
+
+        // Lógica de Auto-Correção de Setor
+        const lowerSetor = setor.toLowerCase();
+        // 1. Se não for exato, tenta achar um match único aproximado
+        if (!validSectorNames.has(lowerSetor)) {
+            const matches = sectors.filter(s => 
+                (s.hospital === targetUnit || !s.hospital) &&
+                (s.name.toLowerCase() === lowerSetor || (lowerSetor.length > 3 && s.name.toLowerCase().includes(lowerSetor)))
+            );
+            
+            // Se encontrar APENAS UM setor que contém o texto (Ex: 'UTI PED' -> 'UTI PEDIATRICA'), assume ele.
+            if (matches.length === 1) {
+                setor = matches[0].name;
+            }
+            // Se encontrar vários ou nenhum, mantém o original para ser corrigido manualmente com o alerta visual
+        }
 
         newCollabs.push({
           id: matricula,
@@ -92,6 +110,41 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleUpdateCollab = async (updatedData: Partial<Collaborator>) => {
+      if (!editingCollab) return;
+      
+      try {
+          // Atualiza estado local
+          setAllCollaborators(prev => prev.map(c => 
+              c.id === editingCollab.id ? { ...c, ...updatedData } : c
+          ));
+
+          // Atualiza Firestore Base RH
+          const docId = editingCollab.employee_id || editingCollab.id;
+          await updateDoc(doc(db, "collaborators", docId), updatedData);
+          
+          // Sincroniza com coleção de Membros (se existir)
+          const qMembers = query(collection(db, "members"), where("employee_id", "==", docId));
+          const snapMembers = await getDocs(qMembers);
+          if (!snapMembers.empty) {
+              const batch = writeBatch(db);
+              snapMembers.forEach(d => {
+                  batch.update(d.ref, { 
+                      full_name: updatedData.full_name,
+                      sector_name: updatedData.sector_name
+                  });
+              });
+              await batch.commit();
+          }
+
+          setEditingCollab(null);
+          // Pequeno feedback visual seria bom, mas o modal fecha e a lista atualiza
+      } catch (e) {
+          console.error("Erro ao atualizar:", e);
+          alert("Erro ao salvar alterações.");
+      }
   };
 
   // Lógica Inteligente de Status
@@ -176,11 +229,14 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
     reader.readAsText(file);
   };
 
-  const filteredList = allCollaborators.filter(c => 
-    c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.employee_id.includes(searchTerm) ||
-    c.sector_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtra por termo de busca E unidade selecionada
+  const filteredList = allCollaborators.filter(c => {
+      const matchesSearch = c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            c.employee_id.includes(searchTerm) ||
+                            c.sector_name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesUnit = c.hospital === targetUnit || (!c.hospital && targetUnit === 'Belém');
+      return matchesSearch && matchesUnit;
+  });
 
   const isBarcarena = targetUnit === 'Barcarena';
 
@@ -294,7 +350,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           <table className="w-full text-left">
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-32">Ações</th>
+                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-40">Ações</th>
                 <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
                 <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Matrícula</th>
                 <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Nome</th>
@@ -309,7 +365,15 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
                 
                 return (
                   <tr key={collab.id} className={`transition-colors ${collab.active ? 'hover:bg-slate-50' : 'bg-slate-50/50 opacity-60'}`}>
-                    <td className="p-5 flex gap-2">
+                    <td className="p-5 flex gap-1">
+                       <ActionTooltip content="Editar Dados / Corrigir Setor">
+                         <button 
+                           onClick={() => setEditingCollab(collab)}
+                           className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
+                         >
+                            <Pencil size={16} />
+                         </button>
+                       </ActionTooltip>
                        <ActionTooltip content={collab.active ? "Inativar: Revoga acessos e remove do PG." : "Reativar: Habilita apenas como colaborador base."}>
                          <button 
                            onClick={() => setItemToToggle(collab)}
@@ -340,7 +404,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
                              {collab.sector_name}
                           </span>
                           {!isSectorValid && collab.active && (
-                             <ActionTooltip content="Setor não cadastrado na lista oficial. Corrija a importação ou adicione o setor na aba 'Setores'.">
+                             <ActionTooltip content="Setor não cadastrado na lista oficial. Clique no lápis para corrigir.">
                                 <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
                              </ActionTooltip>
                           )}
@@ -360,6 +424,18 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           </table>
         </div>
       </div>
+
+      {editingCollab && (
+        <CollaboratorDetailModal 
+            collaborator={editingCollab}
+            reasons={[]}
+            onClose={() => setEditingCollab(null)}
+            onRequestAction={() => {}}
+            isAdmin={true}
+            onUpdate={handleUpdateCollab}
+            sectors={sectors}
+        />
+      )}
 
       {itemToToggle && (
          <ConfirmModal

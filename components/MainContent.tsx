@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { collection, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -180,6 +179,7 @@ const MainContent: React.FC<MainContentProps> = ({
             }} 
             allCollaborators={allCollaborators} 
             photos={pgPhotos}
+            sectors={sectors}
         /> 
         : null;
 

@@ -58,7 +58,13 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
     } catch (error) { console.error("Erro ao deletar:", error); }
   };
 
-  const filtered = pgs.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Filtra por termo de busca E unidade selecionada
+  const filtered = pgs.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesUnit = p.hospital === targetUnit || (!p.hospital && targetUnit === 'Belém');
+      return matchesSearch && matchesUnit;
+  });
+  
   const isBarcarena = targetUnit === 'Barcarena';
 
   return (

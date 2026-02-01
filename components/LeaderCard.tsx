@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Trash2, MessageCircle, Mail, ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
+import { MessageCircle, Mail, ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
 import { Leader } from '../types';
 
 interface LeaderCardProps {
@@ -23,10 +23,10 @@ const LeaderCard: React.FC<LeaderCardProps> = ({ leader, onSelect, onDelete, onS
            </div>
            <button 
               onClick={onDelete}
-              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all z-10"
+              className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all z-10 text-lg filter drop-shadow-sm hover:scale-110"
               title="Excluir cadastro"
            >
-              <Trash2 size={18} />
+              🗑️
            </button>
         </div>
 

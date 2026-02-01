@@ -1,20 +1,21 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, LayoutDashboard, Upload, Settings, UserCog, Hospital, UsersRound, Camera, CalendarCheck, 
   RefreshCw
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db } from '../lib/firebase';
 
-import { Leader, ChangeRequest, ReportSettings, PGMeetingPhoto, MeetingSchedule, Chaplain, Sector, Collaborator, PG } from './types';
-import ImportCollaborators from './components/ImportCollaborators';
-import ReportCoverage from './components/ReportCoverage';
-import LeaderDashboard from './components/LeaderDashboard';
-import ProfileView from './components/ProfileView';
-import AdminManagement from './components/AdminManagement';
-import SettingsView from './components/SettingsView';
-import AdminDashboard from './components/AdminDashboard';
-import MemberManagement from './components/MemberManagement';
+import { Leader, ChangeRequest, ReportSettings, PGMeetingPhoto, MeetingSchedule, Chaplain, Sector, Collaborator, PG } from '../types';
+import ImportCollaborators from './ImportCollaborators';
+import ReportCoverage from './ReportCoverage';
+import LeaderDashboard from './LeaderDashboard';
+import ProfileView from './ProfileView';
+import AdminManagement from './AdminManagement';
+import SettingsView from './SettingsView';
+import AdminDashboard from './AdminDashboard';
+import MemberManagement from './MemberManagement';
 import PGPhotosView from './components/PGPhotosView';
 import ChaplainScale from './components/ChaplainScale';
 
@@ -137,7 +138,7 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
             }} 
           />;
       case 'admin':
-        return authenticatedUser.role === 'ADMIN' ? <AdminManagement pgs={pgs} leaders={leaders} setLeaders={setLeaders} memberRequests={memberRequests} onRequestAction={(id, status) => {}} photos={pgPhotos} allCollaborators={allCollaborators} sectors={sectors} /> : null;
+        return authenticatedUser.role === 'ADMIN' ? <AdminManagement pgs={pgs} sectors={sectors} leaders={leaders} setLeaders={setLeaders} memberRequests={memberRequests} onRequestAction={(id, status) => {}} photos={pgPhotos} allCollaborators={allCollaborators} /> : null;
       case 'import':
         return authenticatedUser.role === 'ADMIN' ? <ImportCollaborators allCollaborators={allCollaborators} setAllCollaborators={setAllCollaborators} adminId={authenticatedUser.id} chaplains={chaplains} setChaplains={setChaplains} sectors={sectors} setSectors={setSectors} pgs={pgs} setPgs={setPgs} /> : null;
       case 'settings':

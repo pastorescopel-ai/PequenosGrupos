@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Search, Plus, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Chaplain, Collaborator } from '../types';
@@ -77,7 +77,7 @@ const ChaplainManagement: React.FC<ChaplainManagementProps> = ({ chaplains, onAd
       <div className="bg-blue-50 p-8 rounded-[2.5rem] border border-blue-100 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-5">
           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
-            <ShieldCheck size={32} />
+            <span className="text-3xl filter drop-shadow-sm">🛡️</span>
           </div>
           <div>
             <h3 className="text-xl font-black text-slate-800 tracking-tight">Promover Novos Capelães</h3>
@@ -116,7 +116,7 @@ const ChaplainManagement: React.FC<ChaplainManagementProps> = ({ chaplains, onAd
           onClick={() => setShowInactive(!showInactive)}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${showInactive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
         >
-          {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
+          <span className="text-lg">{showInactive ? '👁️' : '🕶️'}</span>
           {showInactive ? 'Ocultar Inativos' : 'Ver Inativos'}
         </button>
       </div>

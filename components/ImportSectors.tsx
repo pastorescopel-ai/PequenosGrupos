@@ -23,7 +23,6 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
     setIsProcessing(true);
     
     try {
-        // Remove a filtragem estrita por ponto e vírgula para aceitar colar do Excel ou apenas nomes
         const rows = dataToProcess.split('\n').filter(l => l.trim());
         let currentBatch = writeBatch(db);
         let count = 0;
@@ -36,7 +35,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
             const cleanRow = row.replace(/\r/g, '').trim();
             if (!cleanRow) continue;
 
-            // Lógica flexível de detecção de separador
+            // Lógica flexível de detecção de separador e formato
             if (cleanRow.includes(';')) {
                 // Formato CSV Padrão: CODIGO;NOME
                 const parts = cleanRow.split(';');
@@ -47,10 +46,21 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
                 const parts = cleanRow.split('\t');
                 code = parts[0]?.trim();
                 name = parts[1]?.trim();
+            } else if (cleanRow.includes('_')) {
+                // NOVA LÓGICA: Formato CODIGO_NOME DO SETOR
+                // Ex: 1_HAB_DIRETORIA -> Code: 1, Name: 1_HAB_DIRETORIA
+                const firstUnderscore = cleanRow.indexOf('_');
+                if (firstUnderscore > 0) {
+                    code = cleanRow.substring(0, firstUnderscore).trim();
+                    name = cleanRow;
+                } else {
+                    // Fallback se começar com _
+                    name = cleanRow;
+                    code = name.substring(0, 6).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                }
             } else {
                 // Formato Apenas Nome (gera código automático)
                 name = cleanRow;
-                // Pega as 3 primeiras letras + 3 letras finais ou algo similar para código curto
                 code = name.substring(0, 6).toUpperCase().replace(/[^A-Z0-9]/g, '');
             }
 
@@ -100,7 +110,13 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
     }
   };
 
-  const filtered = sectors.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.code.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Filtra por termo de busca E unidade selecionada
+  const filtered = sectors.filter(s => {
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.code.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesUnit = s.hospital === targetUnit || (!s.hospital && targetUnit === 'Belém'); // Fallback para Belém se não tiver unidade
+      return matchesSearch && matchesUnit;
+  });
+  
   const isBarcarena = targetUnit === 'Barcarena';
 
   return (
@@ -142,7 +158,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
             className={`w-full h-[300px] p-6 bg-white border rounded-[2.5rem] outline-none font-mono text-xs shadow-sm resize-none transition-all ${
                 isBarcarena ? 'border-indigo-200 focus:ring-8 focus:ring-indigo-500/10' : 'border-blue-200 focus:ring-8 focus:ring-blue-500/10'
             }`}
-            placeholder={`Setores para ${targetUnit} (Cole do Excel ou CSV):\n\nUTI Adulto\nCentro Cirúrgico\n\nOu:\nUTI;UTI Adulto`}
+            placeholder={`Cole a lista aqui. O sistema detecta automaticamente:\n\n1_HAB_DIRETORIA (Código: 1)\nUTI Adulto (Código Automático)\n105;UTI NEO (CSV)`}
             value={pasteData}
             onChange={(e) => setPasteData(e.target.value)}
             disabled={isProcessing}
@@ -161,7 +177,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
                     isBarcarena ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
                 }`}
               >
-                {isProcessing ? '...' : <><span className="text-lg">➕</span> Importar para {targetUnit}</>}
+                {isProcessing ? '...' : <><span className="text-lg">📥</span> Importar para {targetUnit}</>}
             </button>
           </div>
         </div>

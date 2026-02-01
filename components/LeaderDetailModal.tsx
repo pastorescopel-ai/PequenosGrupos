@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -14,7 +13,7 @@ import {
   Trash2, 
   Key, 
   Save, 
-  ChevronRight,
+  ChevronRight, 
   Camera,
   Activity,
   AlertCircle,
@@ -24,7 +23,7 @@ import {
   Phone,
   Users
 } from 'lucide-react';
-import { Leader, HospitalUnit, InactivationReason, PGMeetingPhoto, PG } from '../types';
+import { Leader, HospitalUnit, InactivationReason, PGMeetingPhoto, PG, Sector } from '../types';
 import HelpNote from './HelpNote';
 
 interface LeaderDetailModalProps {
@@ -32,6 +31,7 @@ interface LeaderDetailModalProps {
   pgs: PG[];
   leaders?: Leader[]; // Opcional, mas ideal para filtrar PGs ocupados
   photos: PGMeetingPhoto[];
+  sectors: Sector[];
   onClose: () => void;
   onUpdate: (data: Partial<Leader>) => void;
   onInactivate: (reason: InactivationReason) => void;
@@ -44,7 +44,8 @@ const LeaderDetailModal: React.FC<LeaderDetailModalProps> = ({
   leader, 
   pgs,
   leaders = [],
-  photos, 
+  photos,
+  sectors,
   onClose, 
   onUpdate, 
   onInactivate, 

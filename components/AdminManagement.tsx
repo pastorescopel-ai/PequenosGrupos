@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { addDoc, collection, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Leader, ChangeRequest, InactivationReason, PGMeetingPhoto, PG, Collaborator } from '../types';
+import { Leader, ChangeRequest, InactivationReason, PGMeetingPhoto, PG, Collaborator, Sector } from '../types';
 import LeaderDashboard from './LeaderDashboard';
 import AddLeaderModal from './AddLeaderModal';
 import LeaderDetailModal from './LeaderDetailModal';
@@ -31,10 +31,11 @@ interface AdminManagementProps {
   onRequestAction: (id: string, status: 'approved' | 'rejected') => void;
   photos: PGMeetingPhoto[];
   pgs: PG[];
+  sectors: Sector[];
   allCollaborators: Collaborator[];
 }
 
-const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, memberRequests, onRequestAction, photos, pgs, allCollaborators }) => {
+const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, memberRequests, onRequestAction, photos, pgs, sectors, allCollaborators }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [managingLeader, setManagingLeader] = useState<Leader | null>(null);
   const [selectedLeader, setSelectedLeader] = useState<Leader | null>(null);
@@ -204,7 +205,6 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
           </div>
           <button onClick={() => setManagingLeader(null)} className="bg-blue-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">Encerrar Gestão</button>
         </div>
-        {/* Added cast to Collaborator[] for empty members array to fix type mismatch */}
         <LeaderDashboard 
             user={managingLeader} 
             memberRequests={memberRequests} 
@@ -325,11 +325,21 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
       )}
 
       {selectedLeader && (
-        <LeaderDetailModal leader={selectedLeader} pgs={pgs} leaders={leaders} photos={photos} onClose={() => setSelectedLeader(null)} onUpdate={handleUpdateLeader} onInactivate={handleInactivateLeader} onResetPassword={handleResetPassword} />
+        <LeaderDetailModal 
+            leader={selectedLeader} 
+            pgs={pgs} 
+            sectors={sectors} 
+            leaders={leaders} 
+            photos={photos} 
+            onClose={() => setSelectedLeader(null)} 
+            onUpdate={handleUpdateLeader} 
+            onInactivate={handleInactivateLeader} 
+            onResetPassword={handleResetPassword} 
+        />
       )}
 
       {showAddModal && (
-        <AddLeaderModal onClose={() => setShowAddModal(false)} onSave={handleCreateLeader} allCollaborators={allCollaborators} pgs={pgs} leaders={leaders} />
+        <AddLeaderModal onClose={() => setShowAddModal(false)} onSave={handleCreateLeader} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} leaders={leaders} />
       )}
 
       {leaderToDelete && (
