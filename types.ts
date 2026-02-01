@@ -84,6 +84,7 @@ export interface Leader {
   active: boolean;
   needs_password_change?: boolean;
   photo_url?: string;
+  browser_notifications_enabled?: boolean;
 }
 
 export interface ReportSettings {
@@ -112,6 +113,7 @@ export interface ChangeRequest {
   reason_category: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
+  admin_notes?: string;
 }
 
 export interface Collaborator {
@@ -126,7 +128,6 @@ export interface Collaborator {
   pg_name?: string;
 }
 
-// Added PGMeetingPhoto interface used for storing meeting evidences
 export interface PGMeetingPhoto {
   id: string;
   url: string;

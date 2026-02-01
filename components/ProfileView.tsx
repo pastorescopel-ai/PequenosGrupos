@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, IdCard, Building, Lock, CheckCircle, ShieldCheck, User, Save, AlertCircle, Phone, Camera, Edit3, Loader2 } from 'lucide-react';
+import { Mail, IdCard, Building, Lock, CheckCircle, ShieldCheck, User, Save, AlertCircle, Phone, Camera, Edit3, Loader2, BellRing, BellOff } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../lib/firebase';
 import { Leader } from '../types';
+import { requestNotificationPermission } from '../lib/notifications';
 
 interface ProfileViewProps {
   user: Leader;
@@ -16,7 +17,8 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
     employee_id: user.employee_id,
     sector_name: user.sector_name || '',
     whatsapp: user.whatsapp || '',
-    photo_url: user.photo_url || ''
+    photo_url: user.photo_url || '',
+    browser_notifications_enabled: user.browser_notifications_enabled || false
   });
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -29,18 +31,33 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
       employee_id: user.employee_id,
       sector_name: user.sector_name || '',
       whatsapp: user.whatsapp || '',
-      photo_url: user.photo_url || ''
+      photo_url: user.photo_url || '',
+      browser_notifications_enabled: user.browser_notifications_enabled || false
     });
   }, [user]);
+
+  const handleToggleNotifications = async () => {
+    const isCurrentlyEnabled = formData.browser_notifications_enabled;
+    
+    if (!isCurrentlyEnabled) {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        setFormData(prev => ({ ...prev, browser_notifications_enabled: true }));
+        onUpdate({ browser_notifications_enabled: true });
+      } else {
+        alert("Permissão de notificação negada pelo navegador. Verifique as configurações do site.");
+      }
+    } else {
+      setFormData(prev => ({ ...prev, browser_notifications_enabled: false }));
+      onUpdate({ browser_notifications_enabled: false });
+    }
+  };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let v = e.target.value.replace(/\D/g, "");
     if (v.length > 11) v = v.slice(0, 11);
-    
-    // Máscara (XX) XXXXX-XXXX
     v = v.replace(/^(\d{2})(\d)/g, "($1) $2");
     v = v.replace(/(\d)(\d{4})$/, "$1-$2");
-
     setFormData({ ...formData, whatsapp: v });
   };
 
@@ -52,12 +69,10 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
         const storageRef = ref(storage, `avatars/${user.id}/${Date.now()}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
         const downloadURL = await getDownloadURL(snapshot.ref);
-        
         setFormData(prev => ({ ...prev, photo_url: downloadURL }));
-        // Atualiza a foto imediatamente no banco para o usuário não precisar clicar em "Salvar" para a foto
         onUpdate({ photo_url: downloadURL });
       } catch (err) {
-        alert("Erro ao enviar imagem para a nuvem. Tente novamente.");
+        alert("Erro ao enviar imagem para a nuvem.");
       } finally {
         setIsProcessing(false);
       }
@@ -73,6 +88,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
         sector_name: formData.sector_name,
         whatsapp: formData.whatsapp,
         photo_url: formData.photo_url,
+        browser_notifications_enabled: formData.browser_notifications_enabled,
         needs_password_change: false 
       });
       alert("Perfil atualizado com sucesso!");
@@ -96,7 +112,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               className="group relative w-32 h-32 rounded-[2.5rem] bg-white border-8 border-white shadow-2xl flex items-center justify-center text-blue-700 text-5xl font-black uppercase overflow-hidden cursor-pointer transition-transform hover:scale-[1.02]"
             >
               <input type="file" ref={fileInputRef} onChange={handlePhotoChange} className="hidden" accept="image/*" />
-              
               {isProcessing ? (
                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               ) : formData.photo_url ? (
@@ -104,7 +119,6 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               ) : (
                 formData.full_name.charAt(0)
               )}
-              
               <div className="absolute inset-0 bg-blue-900/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <Camera className="text-white" size={24} />
                 <span className="text-[8px] text-white font-black uppercase mt-1 tracking-widest">Alterar</span>
@@ -129,24 +143,14 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-            
             <div className={`p-6 rounded-3xl border transition-all ${isAdmin ? 'bg-white border-slate-200 focus-within:ring-4 focus-within:ring-blue-600/5 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-70'}`}>
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Nome Completo (Exibição)</label>
               <div className="flex items-center gap-3">
                 <User size={20} className={isAdmin ? "text-blue-600" : "text-slate-300"} />
                 {isAdmin ? (
-                  <input 
-                    type="text" 
-                    value={formData.full_name} 
-                    onChange={e => setFormData({...formData, full_name: e.target.value})} 
-                    className="w-full bg-transparent font-black text-slate-800 outline-none"
-                    placeholder="Seu nome"
-                  />
+                  <input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Seu nome" />
                 ) : (
-                  <>
-                    <span className="font-black text-slate-800 truncate">{formData.full_name}</span>
-                    <Lock size={14} className="text-slate-300 ml-auto" />
-                  </>
+                  <><span className="font-black text-slate-800 truncate">{formData.full_name}</span><Lock size={14} className="text-slate-300 ml-auto" /></>
                 )}
               </div>
             </div>
@@ -156,18 +160,9 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               <div className="flex items-center gap-3">
                 <IdCard size={20} className={isAdmin ? "text-blue-600" : "text-slate-300"} />
                 {isAdmin ? (
-                  <input 
-                    type="text" 
-                    value={formData.employee_id} 
-                    onChange={e => setFormData({...formData, employee_id: e.target.value})} 
-                    className="w-full bg-transparent font-black text-slate-800 outline-none"
-                    placeholder="Matrícula"
-                  />
+                  <input type="text" value={formData.employee_id} onChange={e => setFormData({...formData, employee_id: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Matrícula" />
                 ) : (
-                  <>
-                    <span className="font-black text-slate-800">{formData.employee_id}</span>
-                    <Lock size={14} className="text-slate-300 ml-auto" />
-                  </>
+                  <><span className="font-black text-slate-800">{formData.employee_id}</span><Lock size={14} className="text-slate-300 ml-auto" /></>
                 )}
               </div>
             </div>
@@ -176,14 +171,7 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">WhatsApp</label>
               <div className="flex items-center gap-3">
                 <Phone size={20} className="text-blue-600" />
-                <input 
-                  type="tel" 
-                  value={formData.whatsapp} 
-                  onChange={handlePhoneChange} 
-                  placeholder="(91) 99999-9999" 
-                  maxLength={15}
-                  className="w-full bg-transparent font-black text-slate-800 outline-none"
-                />
+                <input type="tel" value={formData.whatsapp} onChange={handlePhoneChange} placeholder="(91) 99999-9999" maxLength={15} className="w-full bg-transparent font-black text-slate-800 outline-none" />
               </div>
             </div>
 
@@ -191,24 +179,36 @@ const ProfileView: React.FC<ProfileViewProps> = ({ user, onUpdate }) => {
               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Setor de Atuação</label>
               <div className="flex items-center gap-3">
                 <Building size={20} className="text-blue-600" />
-                <input 
-                  type="text" 
-                  value={formData.sector_name} 
-                  onChange={e => setFormData({...formData, sector_name: e.target.value})} 
-                  className="w-full bg-transparent font-black text-slate-800 outline-none"
-                  placeholder="Seu setor"
-                />
+                <input type="text" value={formData.sector_name} onChange={e => setFormData({...formData, sector_name: e.target.value})} className="w-full bg-transparent font-black text-slate-800 outline-none" placeholder="Seu setor" />
               </div>
             </div>
           </div>
 
           <div className="pt-10 border-t border-slate-100">
-            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><ShieldCheck className="text-blue-600" /> Segurança</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-               <div className="col-span-2 bg-blue-50 p-6 rounded-2xl text-blue-800 text-xs font-medium">
-                  A gestão de senhas é realizada pela central de autenticação. Para alterar, faça logout e use a opção "Esqueci minha senha".
-               </div>
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><BellRing className="text-blue-600" /> Notificações</h3>
+            <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100 mb-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-5">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${formData.browser_notifications_enabled ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-400'}`}>
+                  {formData.browser_notifications_enabled ? <BellRing size={28} /> : <BellOff size={28} />}
+                </div>
+                <div>
+                  <h4 className="font-black text-slate-800">Alertas do Navegador</h4>
+                  <p className="text-slate-500 text-xs font-medium max-w-xs">Receba avisos de novos convites e confirmações mesmo fora da aba do sistema.</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleToggleNotifications}
+                className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  formData.browser_notifications_enabled 
+                  ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-100' 
+                  : 'bg-blue-600 text-white shadow-xl shadow-blue-100 hover:bg-blue-700'
+                }`}
+              >
+                {formData.browser_notifications_enabled ? 'Desativar Alertas' : 'Ativar Alertas'}
+              </button>
             </div>
+
+            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-8 flex items-center gap-3"><ShieldCheck className="text-blue-600" /> Segurança</h3>
             <button 
               onClick={handleSave} 
               disabled={isProcessing || isSaving}
