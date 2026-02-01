@@ -1,0 +1,10 @@
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/generate-sector-reports?token=CRON_SECRET",
+      "schedule": "0 0 * * 1"
+    }
+  ],
+  "framework": "nextjs"
+}
