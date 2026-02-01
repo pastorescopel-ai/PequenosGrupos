@@ -14,18 +14,23 @@ import {
   UserPlus
 } from 'lucide-react';
 import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest } from '../types';
+import NotificationBanner from './NotificationBanner';
 
 interface AdminDashboardProps {
+  user: Leader;
+  onUpdateUser: (data: Partial<Leader>) => Promise<void>;
   meetingSchedules: MeetingSchedule[];
   onNavigateToScale: () => void;
   leaders: Leader[];
   members: Collaborator[];
   sectors: Sector[];
-  memberRequests?: ChangeRequest[]; // Prop opcional adicionada
-  onNavigateToMembers?: () => void; // Navegação para aceitar membros
+  memberRequests?: ChangeRequest[];
+  onNavigateToMembers?: () => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
+  user,
+  onUpdateUser,
   meetingSchedules, 
   onNavigateToScale, 
   leaders, 
@@ -40,7 +45,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const totalMembersCount = members.length;
   const sectorsCount = sectors.length;
 
-  // Cálculo de meta global (Simulação: Meta é 80% dos setores terem pelo menos 1 membro)
   const sectorsWithMembers = sectors.filter(s => members.some(m => m.sector_name === s.name)).length;
   const coveragePercent = sectorsCount > 0 ? (sectorsWithMembers / sectorsCount) * 100 : 0;
 
@@ -52,7 +56,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     },
     { 
       name: 'Barcarena', 
-      members: 0, // Como é simulação, iniciamos zerado
+      members: 0,
       color: 'bg-indigo-500' 
     },
   ];
@@ -66,10 +70,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </header>
 
-      {/* ÁREA DE ALERTAS */}
+      {/* BANNER DE NOTIFICAÇÃO (SE NECESSÁRIO) */}
+      <NotificationBanner user={user} onUpdateUser={onUpdateUser} />
+
       <div className="space-y-4">
-          
-          {/* Alerta de Capelania */}
           {pendingRequests.length > 0 && (
             <div className="bg-blue-600 rounded-[2rem] p-6 text-white shadow-xl shadow-blue-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-5">
@@ -90,7 +94,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* Alerta de Novos Membros (Cross-Sector) */}
           {pendingMembers.length > 0 && (
             <div className="bg-orange-500 rounded-[2rem] p-6 text-white shadow-xl shadow-orange-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-5">

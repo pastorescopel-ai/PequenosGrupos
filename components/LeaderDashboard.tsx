@@ -4,9 +4,11 @@ import { History, CalendarPlus, CheckCircle2, AlertCircle, Calendar, ArrowRight,
 import { Leader, ChangeRequest, MeetingSchedule, Chaplain, Collaborator, PGMeetingPhoto } from '../types';
 import MeetingScheduleModal from './MeetingScheduleModal';
 import DashboardStats from './DashboardStats';
+import NotificationBanner from './NotificationBanner';
 
 interface LeaderDashboardProps {
   user: Leader;
+  onUpdateUser: (data: Partial<Leader>) => Promise<void>;
   memberRequests: ChangeRequest[];
   meetingSchedule?: MeetingSchedule;
   allSchedules?: MeetingSchedule[];
@@ -17,20 +19,15 @@ interface LeaderDashboardProps {
 }
 
 const LeaderDashboard: React.FC<LeaderDashboardProps> = ({ 
-  user, memberRequests, meetingSchedule, allSchedules, chaplains = [], onUpdateSchedule, members, photos = []
+  user, onUpdateUser, memberRequests, meetingSchedule, allSchedules, chaplains = [], onUpdateSchedule, members, photos = []
 }) => {
   const [isEditingMeeting, setIsEditingMeeting] = useState(false);
 
   const isBelem = user.hospital === 'Belém';
 
   const coveragePercent = useMemo(() => {
-    // Filtra membros vinculados ao setor do líder
     const sectorMembers = members.filter(m => m.sector_name === user.sector_name && m.active !== false && m.employee_id !== user.employee_id);
-    
-    // Regra: Membros do setor vinculados + O próprio Líder
     const totalActiveInPG = sectorMembers.length + 1;
-    
-    // Denominador fixo de simulação ou baseado no RH (idealmente 20 para escala rápida, ou dinâmico)
     const denominator = 20; 
     return Math.min((totalActiveInPG / denominator) * 100, 100);
   }, [members, user.sector_name, user.employee_id]);
@@ -54,6 +51,9 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       
+      {/* BANNER DE NOTIFICAÇÃO (SE NECESSÁRIO) */}
+      <NotificationBanner user={user} onUpdateUser={onUpdateUser} />
+
       <div className="w-full">
          {dashboardMode === 'UNAVAILABLE' && (
             <div className="bg-slate-100 border border-slate-200 rounded-[3rem] p-10 text-slate-500 shadow-inner relative overflow-hidden">

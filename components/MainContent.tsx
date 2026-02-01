@@ -64,6 +64,8 @@ const MainContent: React.FC<MainContentProps> = ({
     case 'dashboard':
       return currentUser.role === 'ADMIN' 
         ? <AdminDashboard 
+            user={currentUser}
+            onUpdateUser={handleUpdateUser}
             meetingSchedules={meetingSchedules} 
             onNavigateToScale={() => setActiveTab('chaplain-scale')} 
             leaders={leaders} 
@@ -74,6 +76,7 @@ const MainContent: React.FC<MainContentProps> = ({
           /> 
         : <LeaderDashboard 
             user={currentUser} 
+            onUpdateUser={handleUpdateUser}
             memberRequests={memberRequests} 
             chaplains={chaplains} 
             meetingSchedule={meetingSchedules.filter(s => s.leader_id === currentUser.id).sort((a,b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]} 
