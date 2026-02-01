@@ -14,7 +14,6 @@ import {
   UserPlus
 } from 'lucide-react';
 import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest } from '../types';
-import NotificationBanner from './NotificationBanner';
 
 interface AdminDashboardProps {
   user: Leader;
@@ -69,9 +68,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <p className="text-slate-500">Monitoramento baseado nos dados atuais de simulação.</p>
         </div>
       </header>
-
-      {/* BANNER DE NOTIFICAÇÃO (SE NECESSÁRIO) */}
-      <NotificationBanner user={user} onUpdateUser={onUpdateUser} />
 
       <div className="space-y-4">
           {pendingRequests.length > 0 && (

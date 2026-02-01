@@ -4,7 +4,6 @@ import { History, CalendarPlus, CheckCircle2, AlertCircle, Calendar, ArrowRight,
 import { Leader, ChangeRequest, MeetingSchedule, Chaplain, Collaborator, PGMeetingPhoto } from '../types';
 import MeetingScheduleModal from './MeetingScheduleModal';
 import DashboardStats from './DashboardStats';
-import NotificationBanner from './NotificationBanner';
 
 interface LeaderDashboardProps {
   user: Leader;
@@ -51,9 +50,6 @@ const LeaderDashboard: React.FC<LeaderDashboardProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       
-      {/* BANNER DE NOTIFICAÇÃO (SE NECESSÁRIO) */}
-      <NotificationBanner user={user} onUpdateUser={onUpdateUser} />
-
       <div className="w-full">
          {dashboardMode === 'UNAVAILABLE' && (
             <div className="bg-slate-100 border border-slate-200 rounded-[3rem] p-10 text-slate-500 shadow-inner relative overflow-hidden">

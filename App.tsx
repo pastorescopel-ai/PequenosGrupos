@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import { collection, doc, updateDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 
@@ -9,6 +9,7 @@ import { Leader } from './types';
 // Custom Hooks
 import { useAuth } from './hooks/useAuth';
 import { useFirestoreData } from './hooks/useFirestoreData';
+import { requestNotificationPermission } from './lib/notifications';
 
 // Components
 import AppLayout from './components/AppLayout';
@@ -32,6 +33,41 @@ const App: React.FC = () => {
     handlePasswordReset 
   } = useAuth();
 
+  // 2. Lógica de Permissão Automática (Primeiro Clique Global)
+  const triggerAutoNotification = useCallback(async () => {
+    if (!currentUser || !("Notification" in window)) return;
+    
+    // Se o navegador ainda não perguntou (estado 'default')
+    if (Notification.permission === 'default') {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        // Atualiza no perfil se o usuário aceitar
+        const q = query(collection(db, "leaders"), where("email", "==", currentUser.email));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          await updateDoc(doc(db, "leaders", snapshot.docs[0].id), { 
+            browser_notifications_enabled: true 
+          });
+          setCurrentUser(prev => prev ? { ...prev, browser_notifications_enabled: true } : null);
+        }
+      }
+      // Remove o ouvinte após a primeira tentativa
+      window.removeEventListener('click', triggerAutoNotification);
+      window.removeEventListener('touchstart', triggerAutoNotification);
+    }
+  }, [currentUser, setCurrentUser]);
+
+  useEffect(() => {
+    if (currentUser && !initializing) {
+      window.addEventListener('click', triggerAutoNotification);
+      window.addEventListener('touchstart', triggerAutoNotification);
+    }
+    return () => {
+      window.removeEventListener('click', triggerAutoNotification);
+      window.removeEventListener('touchstart', triggerAutoNotification);
+    };
+  }, [currentUser, initializing, triggerAutoNotification]);
+
   // Resetar para dashboard sempre que o usuário sair
   useEffect(() => {
     if (!currentUser) {
@@ -39,7 +75,7 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // 2. Hook de Dados
+  // 3. Hook de Dados
   const {
     allCollaborators, setAllCollaborators,
     sectors, setSectors,
@@ -48,7 +84,6 @@ const App: React.FC = () => {
     members, setMembers,
     chaplains, setChaplains,
     meetingSchedules, setMeetingSchedules,
-    // Extract pgPhotos and its setter
     pgPhotos, setPgPhotos,
     memberRequests,
     reportSettings,
@@ -111,7 +146,11 @@ const App: React.FC = () => {
       <AuthScreen 
         mode={authViewMode} 
         error={authError}
-        onSubmit={authViewMode === 'login' ? handleLogin : handleRegister}
+        onSubmit={async (e, email, pass) => {
+          // Gatilho de gesto do usuário no clique do login
+          requestNotificationPermission();
+          authViewMode === 'login' ? handleLogin(e, email, pass) : handleRegister(e, email, pass);
+        }}
         onToggleMode={() => setAuthViewMode(authViewMode === 'login' ? 'register' : 'login')}
         isConfigValid={isConfigValid}
         onForgotPassword={handlePasswordReset}
@@ -142,7 +181,6 @@ const App: React.FC = () => {
         members={members}
         chaplains={chaplains}
         meetingSchedules={meetingSchedules}
-        // Pass pgPhotos data
         pgPhotos={pgPhotos}
         memberRequests={memberRequests}
         reportSettings={reportSettings}
@@ -153,7 +191,6 @@ const App: React.FC = () => {
         setLeaders={setLeaders}
         setMembers={setMembers}
         setChaplains={setChaplains}
-        // Pass pgPhotos setter
         setPgPhotos={setPgPhotos}
 
         handleUpdateUser={handleUpdateUser}
