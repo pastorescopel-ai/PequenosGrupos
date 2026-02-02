@@ -23,19 +23,44 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
     setIsProcessing(true);
     
     try {
-        const names = dataToProcess.split('\n').filter(l => l.trim());
+        const rows = dataToProcess.split('\n').filter(l => l.trim());
         let currentBatch = writeBatch(db);
         let count = 0;
         let totalCount = 0;
 
-        for (const name of names) {
-            const docRef = doc(collection(db, "pgs"));
-            currentBatch.set(docRef, { 
-                id: docRef.id, 
-                name: name.trim(), 
+        for (const row of rows) {
+            const cleanRow = row.replace(/\r/g, '').trim();
+            if(!cleanRow) continue;
+
+            let id = "";
+            let name = cleanRow;
+
+            // Detector de formato "ID; NOME" ou "ID - NOME"
+            if (cleanRow.includes(';')) {
+                const parts = cleanRow.split(';');
+                id = parts[0].trim();
+                name = parts[1].trim();
+            } else if (cleanRow.includes(' - ')) {
+                const parts = cleanRow.split(' - ');
+                id = parts[0].trim();
+                name = parts[1].trim();
+            }
+
+            // Se não tiver ID definido, gera um novo. Se tiver, usa ele (o que permite update/rename)
+            const docRef = id 
+                ? doc(db, "pgs", id) 
+                : doc(collection(db, "pgs"));
+
+            const pgData = {
+                id: docRef.id,
+                name: name,
                 active: true,
                 hospital: targetUnit
-            });
+            };
+
+            // Use merge: true para atualizar o nome mantendo o ID se ele já existir
+            currentBatch.set(docRef, pgData, { merge: true });
+            
             count++;
             totalCount++;
             if (count >= 450) {
@@ -47,15 +72,26 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
         if (count > 0) await currentBatch.commit();
         setResult({ total: totalCount, status: 'success', unit: targetUnit });
         setPasteData('');
-    } catch(e) { console.error(e); alert("Erro ao importar PGs."); } finally { setIsProcessing(false); }
+        alert(`Sucesso! ${totalCount} PGs processados.\nPGs com mesmo ID foram atualizados, novos foram criados.`);
+    } catch(e) { 
+        console.error(e); 
+        alert("Erro ao importar PGs."); 
+    } finally { 
+        setIsProcessing(false); 
+    }
   };
 
   const handleConfirmDelete = async () => {
     if (!itemToDelete) return;
+    const targetId = itemToDelete.id;
+    setItemToDelete(null);
     try {
-        await deleteDoc(doc(db, "pgs", itemToDelete.id));
-        setItemToDelete(null);
-    } catch (error) { console.error("Erro ao deletar:", error); }
+        await deleteDoc(doc(db, "pgs", targetId));
+        setPgs(prev => prev.filter(p => p.id !== targetId));
+    } catch (error) { 
+        console.error("Erro ao deletar:", error);
+        alert("Erro ao excluir PG."); 
+    }
   };
 
   // Filtra por termo de busca E unidade selecionada
@@ -106,7 +142,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
             className={`w-full h-[300px] p-6 bg-white border rounded-[2.5rem] outline-none font-mono text-xs shadow-sm resize-none transition-all ${
                 isBarcarena ? 'border-indigo-200 focus:ring-8 focus:ring-indigo-500/10' : 'border-blue-200 focus:ring-8 focus:ring-blue-500/10'
             }`}
-            placeholder={`PGs do ${targetUnit}:\n\nPG Amigos da Fé\nPG Restaurar`}
+            placeholder={`Formato Recomendado (ID; Nome):\n1; PG da Fé\n2; PG Esperança\n\n(Se importar novamente o ID 1 com outro nome, ele será atualizado)`}
             value={pasteData}
             onChange={(e) => setPasteData(e.target.value)}
             disabled={isProcessing}
@@ -115,7 +151,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
             {result && (
                 <div className="flex items-center justify-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-xl border border-green-100 animate-in zoom-in-95">
                     <span className="text-lg">✅</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest">{result.total} Salvos em {result.unit}</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{result.total} Processados em {result.unit}</span>
                 </div>
             )}
             <button 
@@ -125,7 +161,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
                     isBarcarena ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
                 }`}
                 >
-                {isProcessing ? '...' : <><span className="text-lg">➕</span> Cadastrar PGs em {targetUnit}</>}
+                {isProcessing ? '...' : <><span className="text-lg">➕</span> Processar PGs em {targetUnit}</>}
             </button>
           </div>
         </div>
@@ -147,6 +183,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
                  <thead className="bg-slate-50 sticky top-0">
                     <tr>
                        <th className="p-4 text-[10px] font-black uppercase text-slate-400">Ação</th>
+                       <th className="p-4 text-[10px] font-black uppercase text-slate-400">ID</th>
                        <th className="p-4 text-[10px] font-black uppercase text-slate-400">Nome do PG</th>
                        <th className="p-4 text-[10px] font-black uppercase text-slate-400">Unidade</th>
                     </tr>
@@ -157,6 +194,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs = [], setPgs }) => {
                           <td className="p-4 w-16">
                              <button onClick={() => setItemToDelete({id: p.id, name: p.name})} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-lg filter drop-shadow-sm hover:scale-110">🗑️</button>
                           </td>
+                          <td className="p-4 font-mono text-xs text-slate-400">{p.id}</td>
                           <td className="p-4 font-bold text-slate-700 text-sm">{p.name}</td>
                           <td className="p-4">
                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${

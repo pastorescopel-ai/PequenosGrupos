@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Menu, X, ArrowRight, AlertTriangle, CheckCircle2, AlertCircle, CalendarCheck, UsersRound
+  Menu, X, ArrowRight, AlertTriangle, CheckCircle2, AlertCircle, CalendarCheck, UsersRound, ShieldCheck
 } from 'lucide-react';
 import { Leader, MeetingSchedule, ChangeRequest, Sector, Collaborator } from '../types';
 import HelpSystem from './HelpSystem';
@@ -35,6 +35,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({
       case 'members': return 'Membros do PG';
       case 'reports': return 'Relatórios';
       case 'admin': return 'Gestão de Líderes';
+      case 'sys-admins': return 'Administradores';
       case 'import': return 'Importação de Dados';
       case 'settings': return 'Configurações';
       case 'profile': return 'Meu Perfil';
@@ -144,55 +145,62 @@ const AppLayout: React.FC<AppLayoutProps> = ({
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-          <NavItem 
-            emoji="📊" 
-            label="Dashboard" 
-            active={activeTab === 'dashboard'} 
-            onClick={() => setActiveTab('dashboard')} 
-          />
           
-          {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CAPELAO') && (
-            <NavItem 
-              emoji="🗓️" 
-              label="Escala Pastoral" 
-              active={activeTab === 'chaplain-scale'} 
-              onClick={() => setActiveTab('chaplain-scale')}
-              badge={pendingChaplainRequests > 0 ? pendingChaplainRequests : undefined}
-            />
-          )}
+          {/* GRUPO 1: Gestão de Pessoas */}
+          <div className="space-y-2">
+              <p className="px-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Gestão de Pessoas</p>
+              <NavItem 
+                emoji="📊" 
+                label="Dashboard" 
+                active={activeTab === 'dashboard'} 
+                onClick={() => setActiveTab('dashboard')} 
+              />
+              
+              {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CAPELAO') && (
+                <NavItem 
+                  emoji="🗓️" 
+                  label="Escala Pastoral" 
+                  active={activeTab === 'chaplain-scale'} 
+                  onClick={() => setActiveTab('chaplain-scale')}
+                  badge={pendingChaplainRequests > 0 ? pendingChaplainRequests : undefined}
+                />
+              )}
+              
+              <NavItem 
+                emoji="👥" 
+                label="Membros" 
+                active={activeTab === 'members'} 
+                onClick={() => setActiveTab('members')} 
+              />
+
+              <NavItem 
+                emoji="Camera" 
+                label="Fotos de PG" 
+                active={activeTab === 'meetings'} 
+                onClick={() => setActiveTab('meetings')} 
+                renderIcon={true}
+              />
+          </div>
           
-          <NavItem 
-            emoji="👥" 
-            label="Membros" 
-            active={activeTab === 'members'} 
-            onClick={() => setActiveTab('members')} 
-          />
-          
+          <div className="h-px bg-slate-50 my-4"></div>
+
+          {/* GRUPO 2: Sistema / Admin */}
           {currentUser?.role === 'ADMIN' && (
-            <NavItem 
-              emoji="🖨️" 
-              label="Relatórios" 
-              active={activeTab === 'reports'} 
-              onClick={() => setActiveTab('reports')} 
-            />
-          )}
-          
-          <NavItem 
-            emoji="👤" 
-            label="Perfil" 
-            active={activeTab === 'profile'} 
-            onClick={() => setActiveTab('profile')} 
-          />
-          
-          {currentUser?.role === 'ADMIN' && (
-            <div className="pt-6 mt-2 space-y-2">
-              <p className="px-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Administrativo</p>
+            <div className="space-y-2">
+              <p className="px-4 text-[9px] font-black text-slate-300 uppercase tracking-widest">Sistema / Admin</p>
               <NavItem 
                 emoji="👔" 
                 label="Líderes" 
                 active={activeTab === 'admin'} 
                 onClick={() => setActiveTab('admin')} 
                 badge={pendingMemberRequests > 0 ? pendingMemberRequests : undefined} 
+              />
+              <NavItem 
+                emoji={<ShieldCheck size={20} />} 
+                label="Administradores" 
+                active={activeTab === 'sys-admins'} 
+                onClick={() => setActiveTab('sys-admins')} 
+                renderIcon={true}
               />
               <NavItem 
                 emoji="📥" 
@@ -202,8 +210,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({
                 badge={sectorConflictsCount > 0 ? sectorConflictsCount : undefined} 
               />
               <NavItem 
+                emoji="🖨️" 
+                label="Relatórios" 
+                active={activeTab === 'reports'} 
+                onClick={() => setActiveTab('reports')} 
+              />
+              <NavItem 
                 emoji="⚙️" 
-                label="Ajustes" 
+                label="Configurações" 
                 active={activeTab === 'settings'} 
                 onClick={() => setActiveTab('settings')} 
               />
@@ -331,6 +345,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({
                         badge={pendingMemberRequests} 
                     />
                     <MobileMenuItem 
+                        emoji={<ShieldCheck size={20} />} 
+                        label="Administradores" 
+                        onClick={() => { setActiveTab('sys-admins'); setShowMobileMenu(false); }} 
+                    />
+                    <MobileMenuItem 
                         emoji="📥" 
                         label="Importação" 
                         onClick={() => { setActiveTab('import'); setShowMobileMenu(false); }} 
@@ -361,11 +380,11 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   );
 };
 
-const NavItem = ({ emoji, label, active, onClick, badge }: any) => (
+const NavItem = ({ emoji, label, active, onClick, badge, renderIcon }: any) => (
   <button onClick={onClick} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all duration-200 group ${active ? 'bg-white shadow-sm ring-1 ring-slate-100' : 'hover:bg-slate-50'}`}>
     <div className="flex items-center gap-4">
         <div className={`w-8 h-8 flex items-center justify-center text-xl transition-transform group-hover:scale-110 filter drop-shadow-sm`}>
-            {emoji}
+            {renderIcon ? emoji : <span className="text-xl">{emoji}</span>}
         </div>
         <span className={`text-[13px] font-bold tracking-tight ${active ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`}>{label}</span>
     </div>

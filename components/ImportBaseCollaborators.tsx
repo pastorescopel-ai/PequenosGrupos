@@ -1,6 +1,6 @@
 
-import React, { useState, useRef, useMemo } from 'react';
-import { AlertTriangle, Pencil } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { AlertTriangle, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { writeBatch, doc, deleteDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Collaborator, HospitalUnit, Sector } from '../types';
@@ -11,7 +11,7 @@ import CollaboratorDetailModal from './CollaboratorDetailModal';
 interface ImportBaseCollaboratorsProps {
   allCollaborators: Collaborator[]; 
   setAllCollaborators: React.Dispatch<React.SetStateAction<Collaborator[]>>;
-  sectors: Sector[]; // Nova prop para validação
+  sectors: Sector[]; 
 }
 
 const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCollaborators, setAllCollaborators, sectors = [] }) => {
@@ -23,9 +23,12 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
   const [itemToDelete, setItemToDelete] = useState<{id: string, name: string} | null>(null);
   const [itemToToggle, setItemToToggle] = useState<Collaborator | null>(null);
   const [editingCollab, setEditingCollab] = useState<Collaborator | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cache dos nomes de setores válidos para validação rápida e auto-correção
+  const ITEMS_PER_PAGE = 100;
+
+  // Cache dos nomes de setores válidos para validação rápida
   const validSectorNames = useMemo(() => {
       return new Set(sectors.map(s => s.name.trim().toLowerCase()));
   }, [sectors]);
@@ -50,24 +53,20 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
         const nome = parts[1]?.trim().toUpperCase() || 'SEM NOME';
         let setor = parts[2]?.trim() || 'GERAL';
 
-        // Lógica de Auto-Correção de Setor
+        // Auto-Correção de Setor
         const lowerSetor = setor.toLowerCase();
-        // 1. Se não for exato, tenta achar um match único aproximado
         if (!validSectorNames.has(lowerSetor)) {
             const matches = sectors.filter(s => 
                 (s.hospital === targetUnit || !s.hospital) &&
                 (s.name.toLowerCase() === lowerSetor || (lowerSetor.length > 3 && s.name.toLowerCase().includes(lowerSetor)))
             );
-            
-            // Se encontrar APENAS UM setor que contém o texto (Ex: 'UTI PED' -> 'UTI PEDIATRICA'), assume ele.
             if (matches.length === 1) {
                 setor = matches[0].name;
             }
-            // Se encontrar vários ou nenhum, mantém o original para ser corrigido manualmente com o alerta visual
         }
 
         newCollabs.push({
-          id: matricula,
+          id: matricula, // ID do documento = Matrícula (Evita duplicidade)
           employee_id: matricula,
           full_name: nome,
           sector_name: setor,
@@ -84,6 +83,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
         return;
       }
 
+      // Processamento em Lote
       const batchSize = 450; 
       const chunks = [];
       for (let i = 0; i < newCollabs.length; i += batchSize) {
@@ -96,7 +96,7 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           const batch = writeBatch(db);
           chunk.forEach((collab) => {
               const docRef = doc(db, "collaborators", collab.employee_id);
-              batch.set(docRef, collab);
+              batch.set(docRef, collab, { merge: true });
           });
           await batch.commit();
           totalSaved += chunk.length;
@@ -104,6 +104,8 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
 
       setResult({ total: totalSaved, status: 'success', unit: targetUnit });
       setPasteData('');
+      alert(`Processamento concluído!\n${totalSaved} colaboradores atualizados/criados.`);
+      
     } catch (error) {
       console.error("Erro na importação:", error);
       alert("Erro ao salvar no banco de dados.");
@@ -114,91 +116,36 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
 
   const handleUpdateCollab = async (updatedData: Partial<Collaborator>) => {
       if (!editingCollab) return;
-      
       try {
-          // Atualiza estado local
-          setAllCollaborators(prev => prev.map(c => 
-              c.id === editingCollab.id ? { ...c, ...updatedData } : c
-          ));
-
-          // Atualiza Firestore Base RH
           const docId = editingCollab.employee_id || editingCollab.id;
           await updateDoc(doc(db, "collaborators", docId), updatedData);
-          
-          // Sincroniza com coleção de Membros (se existir)
-          const qMembers = query(collection(db, "members"), where("employee_id", "==", docId));
-          const snapMembers = await getDocs(qMembers);
-          if (!snapMembers.empty) {
-              const batch = writeBatch(db);
-              snapMembers.forEach(d => {
-                  batch.update(d.ref, { 
-                      full_name: updatedData.full_name,
-                      sector_name: updatedData.sector_name
-                  });
-              });
-              await batch.commit();
-          }
-
           setEditingCollab(null);
-          // Pequeno feedback visual seria bom, mas o modal fecha e a lista atualiza
       } catch (e) {
           console.error("Erro ao atualizar:", e);
           alert("Erro ao salvar alterações.");
       }
   };
 
-  // Lógica Inteligente de Status
   const handleConfirmToggleStatus = async () => {
     if (!itemToToggle) return;
     setIsProcessing(true);
-
     try {
         const batch = writeBatch(db);
-        const isActivating = !itemToToggle.active; // Se true, estamos reativando. Se false, inativando.
-
-        // 1. Atualiza SEMPRE na Base de Colaboradores (RH)
+        const isActivating = !itemToToggle.active;
         const collabRef = doc(db, "collaborators", itemToToggle.id);
         batch.update(collabRef, { active: isActivating });
 
         if (!isActivating) {
-            // --- CASO: INATIVAÇÃO (Desliga tudo) ---
-            // Remove acessos de liderança, capelania e MEMBRESIA DE PG, mas mantém o documento para histórico.
-            
-            // 2. Inativar registro de LÍDER
             const qLeader = query(collection(db, "leaders"), where("employee_id", "==", itemToToggle.employee_id));
             const snapLeader = await getDocs(qLeader);
-            snapLeader.forEach(d => {
-                batch.update(d.ref, { active: false });
-            });
+            snapLeader.forEach(d => batch.update(d.ref, { active: false }));
 
-            // 3. Inativar registro de CAPELÃO
-            const qChap = query(collection(db, "chaplains"), where("employee_id", "==", itemToToggle.employee_id));
-            const snapChap = await getDocs(qChap);
-            snapChap.forEach(d => {
-                batch.update(d.ref, { active: false });
-            });
-
-            // 4. Inativar registro de MEMBRO de PG (Isso o remove da lista do Líder)
             const qMember = query(collection(db, "members"), where("employee_id", "==", itemToToggle.employee_id));
             const snapMember = await getDocs(qMember);
-            snapMember.forEach(d => {
-                batch.update(d.ref, { active: false });
-            });
+            snapMember.forEach(d => batch.update(d.ref, { active: false }));
         } 
-        // --- CASO: REATIVAÇÃO ---
-        // Se isActivating === true, NÃO fazemos nada nas coleções 'leaders', 'chaplains' ou 'members'.
-        // O colaborador volta apenas como um funcionário ativo na base RH.
-        // O Líder precisará vinculá-lo novamente ao PG para ele aparecer na lista.
-
         await batch.commit();
-        
-        // Atualiza estado local imediatamente para refletir na UI
-        setAllCollaborators(prev => prev.map(c => 
-            c.id === itemToToggle.id ? { ...c, active: isActivating } : c
-        ));
-        
         setItemToToggle(null);
-
     } catch (error) {
         console.error("Erro ao alterar status:", error);
         alert("Erro ao atualizar status.");
@@ -208,16 +155,18 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
   };
 
   const handleConfirmDelete = async () => {
-    if (!itemToDelete) return;
+    const target = itemToDelete;
+    if (!target) return;
     
+    setItemToDelete(null); // Fecha modal imediatamente
+
     try {
-        await deleteDoc(doc(db, "collaborators", itemToDelete.id));
-        // Remove localmente
-        setAllCollaborators(prev => prev.filter(c => c.id !== itemToDelete.id));
-        setItemToDelete(null);
+        await deleteDoc(doc(db, "collaborators", target.id));
+        setAllCollaborators(prev => prev.filter(c => c.id !== target.id)); // Atualiza visualmente
+        console.log(`Colaborador ${target.name} excluído.`);
     } catch (error) {
         console.error("Erro ao deletar:", error);
-        alert("Erro ao excluir registro.");
+        alert("Erro ao excluir registro. Tente recarregar a página.");
     }
   };
 
@@ -229,14 +178,36 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
     reader.readAsText(file);
   };
 
-  // Filtra por termo de busca E unidade selecionada
-  const filteredList = allCollaborators.filter(c => {
-      const matchesSearch = c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            c.employee_id.includes(searchTerm) ||
-                            c.sector_name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesUnit = c.hospital === targetUnit || (!c.hospital && targetUnit === 'Belém');
-      return matchesSearch && matchesUnit;
-  });
+  // --- LÓGICA DE LISTA PROCESSADA (Filtro + Ordenação + Paginação) ---
+  const processedList = useMemo(() => {
+      // 1. Filtragem
+      let filtered = allCollaborators.filter(c => {
+          const matchesSearch = c.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                c.employee_id.includes(searchTerm) ||
+                                c.sector_name.toLowerCase().includes(searchTerm.toLowerCase());
+          const matchesUnit = c.hospital === targetUnit || (!c.hospital && targetUnit === 'Belém');
+          return matchesSearch && matchesUnit;
+      });
+
+      // 2. Ordenação Inteligente: Inválidos primeiro, depois alfabético
+      return filtered.sort((a, b) => {
+          const aValid = validSectorNames.has(a.sector_name.trim().toLowerCase());
+          const bValid = validSectorNames.has(b.sector_name.trim().toLowerCase());
+          
+          if (aValid !== bValid) {
+              return aValid ? 1 : -1; // Inválido (false) vem antes de Válido (true)
+          }
+          return a.full_name.localeCompare(b.full_name);
+      });
+  }, [allCollaborators, searchTerm, targetUnit, validSectorNames]);
+
+  // Reseta para página 1 se mudar filtros
+  useEffect(() => {
+      setCurrentPage(1);
+  }, [searchTerm, targetUnit]);
+
+  const totalPages = Math.ceil(processedList.length / ITEMS_PER_PAGE);
+  const currentData = processedList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const isBarcarena = targetUnit === 'Barcarena';
 
@@ -346,82 +317,111 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
           </div>
         </div>
 
-        <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm max-h-[500px] overflow-y-auto custom-scrollbar">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50 sticky top-0 z-10">
-              <tr>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-40">Ações</th>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Matrícula</th>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Nome</th>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Setor (Validação)</th>
-                <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Unidade</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredList.slice(0, 100).map((collab) => {
-                // Validação de Setor
-                const isSectorValid = validSectorNames.has(collab.sector_name.trim().toLowerCase());
-                
-                return (
-                  <tr key={collab.id} className={`transition-colors ${collab.active ? 'hover:bg-slate-50' : 'bg-slate-50/50 opacity-60'}`}>
-                    <td className="p-5 flex gap-1">
-                       <ActionTooltip content="Editar Dados / Corrigir Setor">
-                         <button 
-                           onClick={() => setEditingCollab(collab)}
-                           className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
-                         >
-                            <Pencil size={16} />
-                         </button>
-                       </ActionTooltip>
-                       <ActionTooltip content={collab.active ? "Inativar: Revoga acessos e remove do PG." : "Reativar: Habilita apenas como colaborador base."}>
-                         <button 
-                           onClick={() => setItemToToggle(collab)}
-                           className={`p-2 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110`}
-                         >
-                            {collab.active ? '🟢' : '🔴'}
-                         </button>
-                       </ActionTooltip>
-                       <ActionTooltip content="Excluir Definitivamente">
-                         <button 
-                           onClick={() => setItemToDelete({id: collab.id, name: collab.full_name})}
-                           className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
-                         >
-                            🗑️
-                         </button>
-                       </ActionTooltip>
-                    </td>
-                    <td className="p-5">
-                      <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${collab.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {collab.active ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </td>
-                    <td className="p-5 font-mono font-bold text-slate-500 text-xs">{collab.employee_id}</td>
-                    <td className="p-5 font-bold text-slate-700 text-sm">{collab.full_name}</td>
-                    <td className="p-5">
-                       <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold ${!isSectorValid && collab.active ? 'text-amber-700' : 'text-slate-500'}`}>
-                             {collab.sector_name}
-                          </span>
-                          {!isSectorValid && collab.active && (
-                             <ActionTooltip content="Setor não cadastrado na lista oficial. Clique no lápis para corrigir.">
-                                <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
-                             </ActionTooltip>
-                          )}
-                       </div>
-                    </td>
-                    <td className="p-5">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
-                          collab.hospital === 'Barcarena' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
-                      }`}>
-                          {collab.hospital || 'Belém'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-40">Ações</th>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Status</th>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Matrícula</th>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Nome</th>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Setor (Validação)</th>
+                  <th className="p-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Unidade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {currentData.map((collab) => {
+                  const isSectorValid = validSectorNames.has(collab.sector_name.trim().toLowerCase());
+                  
+                  return (
+                    <tr key={collab.id} className={`transition-colors ${collab.active ? 'hover:bg-slate-50' : 'bg-slate-50/50 opacity-60'}`}>
+                      <td className="p-5 flex gap-1">
+                        <ActionTooltip content="Editar Dados / Corrigir Setor">
+                          <button 
+                            onClick={() => setEditingCollab(collab)}
+                            className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
+                          >
+                              <Pencil size={16} />
+                          </button>
+                        </ActionTooltip>
+                        <ActionTooltip content={collab.active ? "Inativar" : "Reativar"}>
+                          <button 
+                            onClick={() => setItemToToggle(collab)}
+                            className={`p-2 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110`}
+                          >
+                              {collab.active ? '🟢' : '🔴'}
+                          </button>
+                        </ActionTooltip>
+                        <ActionTooltip content="Excluir Definitivamente">
+                          <button 
+                            onClick={() => setItemToDelete({id: collab.id, name: collab.full_name})}
+                            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all text-lg filter drop-shadow-sm hover:scale-110"
+                          >
+                              🗑️
+                          </button>
+                        </ActionTooltip>
+                      </td>
+                      <td className="p-5">
+                        <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${collab.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {collab.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="p-5 font-mono font-bold text-slate-500 text-xs">{collab.employee_id}</td>
+                      <td className="p-5 font-bold text-slate-700 text-sm">{collab.full_name}</td>
+                      <td className="p-5">
+                        <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${!isSectorValid && collab.active ? 'text-amber-700' : 'text-slate-500'}`}>
+                              {collab.sector_name}
+                            </span>
+                            {!isSectorValid && collab.active && (
+                              <ActionTooltip content="Setor não cadastrado na lista oficial.">
+                                  <AlertTriangle size={16} className="text-amber-500 animate-pulse" />
+                              </ActionTooltip>
+                            )}
+                        </div>
+                      </td>
+                      <td className="p-5">
+                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${
+                            collab.hospital === 'Barcarena' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                            {collab.hospital || 'Belém'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {currentData.length === 0 && (
+                    <tr>
+                        <td colSpan={6} className="p-10 text-center text-slate-400 italic text-sm">Nenhum registro encontrado.</td>
+                    </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* PAGINAÇÃO */}
+          {totalPages > 1 && (
+              <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50">
+                  <button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 disabled:opacity-50 hover:bg-slate-100 flex items-center gap-2 transition-all"
+                  >
+                      <ChevronLeft size={14} /> Anterior
+                  </button>
+                  <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                      Página {currentPage} de {totalPages} • Total: {processedList.length}
+                  </span>
+                  <button 
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 disabled:opacity-50 hover:bg-slate-100 flex items-center gap-2 transition-all"
+                  >
+                      Próxima <ChevronRight size={14} />
+                  </button>
+              </div>
+          )}
         </div>
       </div>
 
@@ -442,33 +442,23 @@ const ImportBaseCollaborators: React.FC<ImportBaseCollaboratorsProps> = ({ allCo
             title={itemToToggle.active ? "Inativar Colaborador?" : "Reativar Colaborador?"}
             description={
                 itemToToggle.active ? 
-                <>
-                   <b>{itemToToggle.full_name}</b> será removido automaticamente dos PGs, Liderança e Capelania.
-                   <br/><br/>
-                   <span className="text-xs text-orange-600">O histórico será preservado, mas ele não aparecerá mais nas listas ativas.</span>
-                </> : 
-                <>
-                   <b>{itemToToggle.full_name}</b> voltará a estar disponível na base RH.
-                   <br/><br/>
-                   <span className="text-xs text-blue-600">Atenção: Ele NÃO volta automaticamente para o PG. O líder deverá vinculá-lo novamente.</span>
-                </>
+                <><b>{itemToToggle.full_name}</b> será removido automaticamente dos PGs.</> : 
+                <><b>{itemToToggle.full_name}</b> voltará a estar disponível.</>
             }
             onConfirm={handleConfirmToggleStatus}
             onCancel={() => setItemToToggle(null)}
-            confirmText={itemToToggle.active ? "Confirmar Inativação" : "Reativar Cadastro"}
-            cancelText="Cancelar"
+            confirmText="Confirmar"
             variant={itemToToggle.active ? "warning" : "success"}
-            icon={<span className="text-4xl">{itemToToggle.active ? '⚠️' : '✅'}</span>}
          />
       )}
 
       {itemToDelete && (
         <ConfirmModal
           title="Excluir Definitivamente?"
-          description={<>Atenção: A remoção de <b>{itemToDelete.name}</b> é irreversível. Prefira usar a inativação se houver histórico.</>}
+          description={<>Atenção: A remoção de <b>{itemToDelete.name}</b> é irreversível. Esta ação removerá o colaborador da base.</>}
           onConfirm={handleConfirmDelete}
           onCancel={() => setItemToDelete(null)}
-          confirmText="Excluir Registro"
+          confirmText="Sim, Excluir Registro"
           variant="danger"
         />
       )}

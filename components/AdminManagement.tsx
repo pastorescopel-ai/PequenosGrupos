@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 import { addDoc, collection, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Leader, ChangeRequest, InactivationReason, PGMeetingPhoto, PG, Collaborator, Sector } from '../types';
+import { Leader, ChangeRequest, InactivationReason, PGMeetingPhoto, PG, Collaborator, Sector, HospitalUnit } from '../types';
 import LeaderDashboard from './LeaderDashboard';
-import AddLeaderModal from './AddLeaderModal';
+import UserRegistrationModal from './UserRegistrationModal';
 import LeaderDetailModal from './LeaderDetailModal';
 import ConfirmModal from './ConfirmModal';
 import LeaderCard from './LeaderCard';
@@ -43,11 +43,12 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
   const [leaderToResetPass, setLeaderToResetPass] = useState<{email: string, name: string} | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [processingReqId, setProcessingReqId] = useState<string | null>(null);
+  const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>('Belém');
 
   const [rejectionTarget, setRejectionTarget] = useState<ChangeRequest | null>(null);
   const [rejectionReasonText, setRejectionReasonText] = useState("");
 
-  const displayedLeaders = leaders.filter(l => showInactive ? true : l.active);
+  const displayedLeaders = leaders.filter(l => (showInactive ? true : l.active) && l.hospital === selectedUnit);
   const pendingRequests = memberRequests.filter(req => req.status === 'pending');
 
   const sortedLeaders = [...displayedLeaders].sort((a, b) => {
@@ -105,9 +106,17 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
       }
   };
 
-  const handleCreateLeader = async (data: any) => {
+  const handleCreateUser = async (data: any) => {
     try {
       const emailFormatted = data.email.toLowerCase().trim();
+      
+      // Validação de duplicidade básica
+      const exists = leaders.some(l => l.email === emailFormatted || (l.employee_id === data.matricula && !data.isExternal));
+      if(exists) {
+          alert("Usuário já cadastrado (E-mail ou Matrícula em uso).");
+          return;
+      }
+
       const selectedPG = pgs.find(p => p.id === data.pgId);
       const pgName = selectedPG ? selectedPG.name : '';
 
@@ -115,8 +124,8 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
         full_name: data.name,
         employee_id: data.isExternal ? 'EXTERNO' : data.matricula,
         hospital: data.hospital,
-        is_admin: false,
-        role: 'LIDER',
+        is_admin: data.role === 'ADMIN',
+        role: data.role,
         status: 'approved',
         sector_name: data.sector,
         pg_name: pgName,
@@ -127,8 +136,10 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
       };
       
       await addDoc(collection(db, "leaders"), newL);
+      alert("Usuário cadastrado com sucesso!");
     } catch (e) {
       console.error(e);
+      alert("Erro ao criar usuário.");
     }
   };
 
@@ -182,7 +193,7 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
     e.stopPropagation();
     const origin = window.location.origin;
     const inviteLink = `${origin}?mode=register&email=${encodeURIComponent(leader.email || '')}`;
-    const message = `Olá *${leader.full_name.split(' ')[0]}*, \n\nVocê foi cadastrado como Líder de PG no sistema do Hospital Adventista.\n\nPara acessar, clique no link abaixo e crie sua senha pessoal:\n\n🔗 ${inviteLink}\n\nSeu e-mail de acesso é: *${leader.email}*`;
+    const message = `Olá *${leader.full_name.split(' ')[0]}*, \n\nVocê foi cadastrado como ${leader.role === 'ADMIN' ? 'Administrador' : 'Líder de PG'} no sistema do Hospital Adventista.\n\nPara acessar, clique no link abaixo e crie sua senha pessoal:\n\n🔗 ${inviteLink}\n\nSeu e-mail de acesso é: *${leader.email}*`;
 
     if (leader.whatsapp) {
       const waLink = `https://wa.me/55${leader.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
@@ -228,17 +239,37 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
 
   return (
     <div className="space-y-12 animate-in fade-in duration-500 relative">
-      <header className="flex justify-between items-center">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Cadastro de Líderes</h2>
-          <p className="text-slate-500 font-medium">Gestão de acessos e pré-cadastros.</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Gestão de Usuários</h2>
+          <p className="text-slate-500 font-medium">Controle de líderes e administradores do sistema.</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)} 
-          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-blue-700 transition-all shadow-xl active:scale-95"
-        >
-          <Plus size={20} /> Novo Líder
-        </button>
+        <div className="flex gap-4">
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
+                <button
+                    onClick={() => setSelectedUnit('Belém')}
+                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    selectedUnit === 'Belém' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                >
+                    HAB (Belém)
+                </button>
+                <button
+                    onClick={() => setSelectedUnit('Barcarena')}
+                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    selectedUnit === 'Barcarena' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                >
+                    HABA (Barcarena)
+                </button>
+            </div>
+            <button 
+                onClick={() => setShowAddModal(true)} 
+                className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-blue-700 transition-all shadow-xl active:scale-95"
+            >
+                <Plus size={20} /> Adicionar Usuário
+            </button>
+        </div>
       </header>
 
       {pendingRequests.length > 0 && (
@@ -290,17 +321,23 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
          </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedLeaders.map(l => (
-          <LeaderCard 
-            key={l.id}
-            leader={l}
-            onSelect={() => setSelectedLeader(l)}
-            onDelete={(e) => { e.stopPropagation(); setLeaderToDelete({ id: l.id, name: l.full_name }); }}
-            onSendInvite={(e) => handleSendInvite(e, l)}
-          />
-        ))}
-      </div>
+      {displayedLeaders.length === 0 ? (
+          <div className="text-center py-20 opacity-50">
+              <p className="text-lg font-bold text-slate-400">Nenhum usuário encontrado para {selectedUnit}.</p>
+          </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sortedLeaders.map(l => (
+            <LeaderCard 
+                key={l.id}
+                leader={l}
+                onSelect={() => setSelectedLeader(l)}
+                onDelete={(e) => { e.stopPropagation(); setLeaderToDelete({ id: l.id, name: l.full_name }); }}
+                onSendInvite={(e) => handleSendInvite(e, l)}
+            />
+            ))}
+        </div>
+      )}
 
       {rejectionTarget && (
           <div className="fixed inset-0 bg-red-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
@@ -339,11 +376,19 @@ const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, 
       )}
 
       {showAddModal && (
-        <AddLeaderModal onClose={() => setShowAddModal(false)} onSave={handleCreateLeader} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} leaders={leaders} />
+        <UserRegistrationModal 
+            onClose={() => setShowAddModal(false)} 
+            onSave={handleCreateUser} 
+            allCollaborators={allCollaborators} 
+            pgs={pgs} 
+            sectors={sectors} 
+            leaders={leaders}
+            initialUnit={selectedUnit}
+        />
       )}
 
       {leaderToDelete && (
-        <ConfirmModal title="Excluir Cadastro?" description={<>Você está prestes a remover o líder <b>{leaderToDelete.name}</b>.</>} onConfirm={confirmDelete} onCancel={() => setLeaderToDelete(null)} confirmText="Excluir Definitivamente" />
+        <ConfirmModal title="Excluir Cadastro?" description={<>Você está prestes a remover o usuário <b>{leaderToDelete.name}</b>.</>} onConfirm={confirmDelete} onCancel={() => setLeaderToDelete(null)} confirmText="Excluir Definitivamente" />
       )}
 
       {leaderToResetPass && (

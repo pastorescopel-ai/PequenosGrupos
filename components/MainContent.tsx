@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { collection, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -14,6 +15,7 @@ import AdminDashboard from './AdminDashboard';
 import MemberManagement from './MemberManagement';
 import ChaplainScale from './ChaplainScale';
 import PGPhotosView from './PGPhotosView';
+import SystemAdminsView from './SystemAdminsView';
 
 interface MainContentProps {
   activeTab: string;
@@ -72,6 +74,7 @@ const MainContent: React.FC<MainContentProps> = ({
             sectors={sectors} 
             memberRequests={memberRequests} 
             onNavigateToMembers={() => setActiveTab('admin')} 
+            allCollaborators={allCollaborators}
           /> 
         : <LeaderDashboard 
             user={currentUser} 
@@ -181,6 +184,17 @@ const MainContent: React.FC<MainContentProps> = ({
             photos={pgPhotos}
             sectors={sectors}
         /> 
+        : null;
+
+    case 'sys-admins':
+      return currentUser.role === 'ADMIN' 
+        ? <SystemAdminsView 
+            leaders={leaders} 
+            allCollaborators={allCollaborators} 
+            pgs={pgs} 
+            sectors={sectors} 
+            onUpdateUser={handleUpdateUser} 
+        />
         : null;
 
     case 'settings':

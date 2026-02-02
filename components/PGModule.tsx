@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, LayoutDashboard, Upload, Settings, UserCog, Hospital, UsersRound, Camera, CalendarCheck, 
-  RefreshCw
+  RefreshCw, ShieldCheck
 } from 'lucide-react';
 import { collection, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -18,6 +18,7 @@ import AdminDashboard from './AdminDashboard';
 import MemberManagement from './MemberManagement';
 import PGPhotosView from './components/PGPhotosView';
 import ChaplainScale from './components/ChaplainScale';
+import SystemAdminsView from './SystemAdminsView';
 
 interface PGModuleProps {
   authenticatedUser: Leader; 
@@ -78,6 +79,9 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
               leaders={leaders} 
               members={members} 
               sectors={sectors} 
+              memberRequests={memberRequests} 
+              onNavigateToMembers={() => setActiveTab('admin')}
+              allCollaborators={allCollaborators}
             /> 
           : <LeaderDashboard 
               user={authenticatedUser} 
@@ -139,6 +143,8 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
           />;
       case 'admin':
         return authenticatedUser.role === 'ADMIN' ? <AdminManagement pgs={pgs} sectors={sectors} leaders={leaders} setLeaders={setLeaders} memberRequests={memberRequests} onRequestAction={(id, status) => {}} photos={pgPhotos} allCollaborators={allCollaborators} /> : null;
+      case 'sys-admins':
+        return authenticatedUser.role === 'ADMIN' ? <SystemAdminsView leaders={leaders} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} onUpdateUser={async (data) => {}} /> : null;
       case 'import':
         return authenticatedUser.role === 'ADMIN' ? <ImportCollaborators allCollaborators={allCollaborators} setAllCollaborators={setAllCollaborators} adminId={authenticatedUser.id} chaplains={chaplains} setChaplains={setChaplains} sectors={sectors} setSectors={setSectors} pgs={pgs} setPgs={setPgs} /> : null;
       case 'settings':
@@ -166,6 +172,7 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
             <>
               <div className="h-px bg-slate-100 my-4"></div>
               <NavBtn icon={<UserCog size={18}/>} label="Líderes" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />
+              <NavBtn icon={<ShieldCheck size={18}/>} label="Administradores" active={activeTab === 'sys-admins'} onClick={() => setActiveTab('sys-admins')} />
               <NavBtn icon={<Upload size={18}/>} label="Importação" active={activeTab === 'import'} onClick={() => setActiveTab('import')} />
               <NavBtn icon={<Settings size={18}/>} label="Ajustes PDF" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
             </>

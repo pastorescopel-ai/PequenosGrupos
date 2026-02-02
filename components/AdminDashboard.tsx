@@ -11,7 +11,8 @@ import {
   Activity,
   ChevronRight,
   BellRing,
-  UserPlus
+  UserPlus,
+  Database
 } from 'lucide-react';
 import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest } from '../types';
 
@@ -25,6 +26,7 @@ interface AdminDashboardProps {
   sectors: Sector[];
   memberRequests?: ChangeRequest[];
   onNavigateToMembers?: () => void;
+  allCollaborators?: Collaborator[];
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
@@ -36,7 +38,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   members, 
   sectors,
   memberRequests = [],
-  onNavigateToMembers
+  onNavigateToMembers,
+  allCollaborators = []
 }) => {
   const pendingRequests = meetingSchedules.filter(s => s.request_chaplain && s.chaplain_status === 'pending');
   const pendingMembers = memberRequests.filter(r => r.status === 'pending');
@@ -71,6 +74,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       color: 'bg-indigo-500' 
     },
   ];
+
+  // Cálculo das Bases RH
+  const rhBelemCount = allCollaborators.filter(c => c.active && (c.hospital === 'Belém' || !c.hospital)).length;
+  const rhBarcarenaCount = allCollaborators.filter(c => c.active && c.hospital === 'Barcarena').length;
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -123,11 +130,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={32}/>} color="text-blue-600" />
-        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={32}/>} color="text-emerald-500" />
-        <StatCard label="Setores Ativos" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={32}/>} color="text-amber-500" />
-        <StatCard label="Setores Totais" value={sectorsCount.toString()} icon={<Hospital size={32}/>} color="text-slate-400" />
+      {/* Grid de Estatísticas */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
+        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={28}/>} color="text-blue-600" />
+        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={28}/>} color="text-emerald-500" />
+        <StatCard label="Setores Ativos" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={28}/>} color="text-amber-500" />
+        <StatCard label="Setores Totais" value={sectorsCount.toString()} icon={<Hospital size={28}/>} color="text-slate-400" />
+        <StatCard label="Base RH (Belém)" value={rhBelemCount.toString()} icon={<Database size={28}/>} color="text-blue-700" />
+        <StatCard label="Base RH (Barcarena)" value={rhBarcarenaCount.toString()} icon={<Database size={28}/>} color="text-indigo-700" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -179,11 +189,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 };
 
 const StatCard = ({ label, value, icon, color }: any) => (
-  <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all flex flex-col items-center justify-center gap-3">
+  <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all flex flex-col items-center justify-center gap-2">
     <div className={`${color} mb-1`}>{icon}</div>
     <div className="text-center">
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{label}</p>
-        <p className="text-4xl font-black text-slate-800 leading-none">{value}</p>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em] mb-1 leading-tight">{label}</p>
+        <p className="text-3xl font-black text-slate-800 leading-none">{value}</p>
     </div>
   </div>
 );

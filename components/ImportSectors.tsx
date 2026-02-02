@@ -47,30 +47,29 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
                 code = parts[0]?.trim();
                 name = parts[1]?.trim();
             } else if (cleanRow.includes('_')) {
-                // NOVA LÓGICA: Formato CODIGO_NOME DO SETOR
-                // Ex: 1_HAB_DIRETORIA -> Code: 1, Name: 1_HAB_DIRETORIA
+                // Formato CODIGO_NOME DO SETOR
                 const firstUnderscore = cleanRow.indexOf('_');
                 if (firstUnderscore > 0) {
                     code = cleanRow.substring(0, firstUnderscore).trim();
                     name = cleanRow;
                 } else {
-                    // Fallback se começar com _
                     name = cleanRow;
                     code = name.substring(0, 6).toUpperCase().replace(/[^A-Z0-9]/g, '');
                 }
             } else {
-                // Formato Apenas Nome (gera código automático)
+                // Formato Apenas Nome
                 name = cleanRow;
                 code = name.substring(0, 6).toUpperCase().replace(/[^A-Z0-9]/g, '');
             }
 
-            // Fallbacks de segurança
             if (!name && code) name = code;
             if (!code && name) code = name.substring(0, 6).toUpperCase();
 
             if (!name) continue;
 
-            const docRef = doc(collection(db, "sectors"));
+            // ID do Documento = Código do Setor (Upsert puro)
+            const docRef = doc(db, "sectors", code.toUpperCase());
+            
             currentBatch.set(docRef, {
                 id: docRef.id,
                 code: code.toUpperCase(),
@@ -78,7 +77,8 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
                 active: true,
                 created_at: new Date().toISOString(),
                 hospital: targetUnit
-            });
+            }, { merge: true });
+
             count++;
             totalCount++;
             
@@ -92,6 +92,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
 
         setResult({ total: totalCount, status: 'success', unit: targetUnit });
         setPasteData('');
+        alert(`Processamento concluído: ${totalCount} setores.`);
     } catch (error) {
         console.error(error);
         alert("Erro ao importar setores.");
@@ -102,11 +103,14 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors = [], setSectors 
 
   const handleConfirmDelete = async () => {
     if (!itemToDelete) return;
+    const targetId = itemToDelete.id;
+    setItemToDelete(null);
     try {
-        await deleteDoc(doc(db, "sectors", itemToDelete.id));
-        setItemToDelete(null);
+        await deleteDoc(doc(db, "sectors", targetId));
+        setSectors(prev => prev.filter(s => s.id !== targetId));
     } catch (error) {
         console.error("Erro ao deletar:", error);
+        alert("Erro ao excluir setor.");
     }
   };
 
