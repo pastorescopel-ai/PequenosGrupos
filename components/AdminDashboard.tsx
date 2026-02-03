@@ -6,13 +6,12 @@ import {
   Hospital, 
   Target, 
   BarChart3, 
-  ArrowUpRight, 
-  ArrowDownRight,
   Activity,
   ChevronRight,
   BellRing,
   UserPlus,
-  Database
+  Database,
+  Building2
 } from 'lucide-react';
 import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest } from '../types';
 
@@ -55,6 +54,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [activeMembers, activeLeaders]);
 
   const sectorsCount = sectors.length;
+  const sectorsBelemCount = sectors.filter(s => s.hospital === 'Belém' || !s.hospital).length;
+  const sectorsBarcarenaCount = sectors.filter(s => s.hospital === 'Barcarena').length;
+
   const sectorsWithPGs = sectors.filter(s => 
     members.some(m => m.sector_name === s.name && m.active !== false) ||
     leaders.some(l => l.sector_name === s.name && l.active)
@@ -136,14 +138,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
       </div>
 
-      {/* Grid de Estatísticas */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
-        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={28}/>} color="text-blue-600" />
-        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={28}/>} color="text-emerald-500" />
-        <StatCard label="Setores Ativos" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={28}/>} color="text-amber-500" />
-        <StatCard label="Setores Totais" value={sectorsCount.toString()} icon={<Hospital size={28}/>} color="text-slate-400" />
-        <StatCard label="Base RH (Belém)" value={rhBelemCount.toString()} icon={<Database size={28}/>} color="text-blue-700" />
-        <StatCard label="Base RH (HABA)" value={rhBarcarenaCount.toString()} icon={<Database size={28}/>} color="text-indigo-700" />
+      {/* Grid de Estatísticas Master */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 md:gap-6">
+        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={24}/>} color="text-blue-600" />
+        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={24}/>} color="text-emerald-500" />
+        <StatCard label="Adesão Setores" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={24}/>} color="text-amber-500" />
+        
+        <StatCard label="Setores HAB" value={sectorsBelemCount.toString()} icon={<Hospital size={24}/>} color="text-blue-500" />
+        <StatCard label="Setores HABA" value={sectorsBarcarenaCount.toString()} icon={<Building2 size={24}/>} color="text-indigo-500" />
+        
+        <StatCard label="Base RH HAB" value={rhBelemCount.toString()} icon={<Database size={24}/>} color="text-slate-400" />
+        <StatCard label="Base RH HABA" value={rhBarcarenaCount.toString()} icon={<Database size={24}/>} color="text-slate-400" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -201,8 +206,8 @@ const StatCard = ({ label, value, icon, color }: any) => (
   <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all flex flex-col items-center justify-center gap-2">
     <div className={`${color} mb-1`}>{icon}</div>
     <div className="text-center">
-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.1em] mb-1 leading-tight">{label}</p>
-        <p className="text-3xl font-black text-slate-800 leading-none">{value}</p>
+        <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.1em] mb-1 leading-tight">{label}</p>
+        <p className="text-2xl font-black text-slate-800 leading-none">{value}</p>
     </div>
   </div>
 );

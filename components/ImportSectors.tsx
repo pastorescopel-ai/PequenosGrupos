@@ -38,7 +38,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors, setSectors }) =>
             if (unidadeRaw.includes('barcarena') || unidadeRaw.includes('haba')) unit = 'Barcarena';
 
             if (code && name) {
-                // O código do setor é o ID do documento. Isso evita duplicação de códigos.
+                // O código do setor é o ID. Isso impede duplicidade.
                 const docRef = doc(db, "sectors", code);
                 batch.set(docRef, { 
                   id: code, 
@@ -56,7 +56,7 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors, setSectors }) =>
         setPasteData('');
         setSuccessCount(count);
     } catch (e) {
-        alert("Erro na importação da estrutura.");
+        alert("Erro na estrutura.");
     } finally {
         setIsProcessing(false);
     }
@@ -77,44 +77,32 @@ const ImportSectors: React.FC<ImportSectorsProps> = ({ sectors, setSectors }) =>
           <div className="space-y-6">
             <div className="flex items-center gap-3 text-emerald-700">
                <Building size={28} />
-               <h4 className="text-xl font-black">Estrutura de Setores</h4>
+               <h4 className="text-xl font-black">Setores Hospitalares</h4>
             </div>
             <p className="text-xs text-slate-500 font-medium bg-white/70 p-5 rounded-[2rem] border border-emerald-100">
-              Formato: <span className="font-black text-emerald-700">ID ; SETOR ; UNIDADE</span><br/><br/>
-              O ID será usado para vincular colaboradores ao seu setor. Use este import para corrigir nomes de setores sem afetar os colaboradores já vinculados.
+              Esquema: <span className="font-black text-emerald-700">ID ; SETOR ; UNIDADE</span><br/><br/>
+              Utilize IDs numéricos para vincular colaboradores. Reimportar o mesmo ID corrige o nome do setor instantaneamente.
             </p>
 
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full p-8 border-4 border-dashed border-emerald-200 rounded-[2.5rem] bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all group flex flex-col items-center gap-3"
-            >
+            <button onClick={() => fileInputRef.current?.click()} className="w-full p-8 border-4 border-dashed border-emerald-200 rounded-[2.5rem] bg-white hover:bg-emerald-50 hover:border-emerald-400 transition-all group flex flex-col items-center gap-3">
                 <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={onFileChange}/>
                 <Upload size={32} className="text-emerald-400 group-hover:scale-110 transition-transform" />
-                <span className="font-black text-[11px] uppercase text-emerald-600 tracking-widest">Upload Setores</span>
+                <span className="font-black text-[11px] uppercase text-emerald-600 tracking-widest">Subir Planilha</span>
             </button>
           </div>
 
           <div className="lg:col-span-2 flex flex-col gap-4">
               <div className="flex justify-between items-center px-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Colagem manual:</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Colagem Manual:</label>
                 {successCount !== null && (
-                    <div className="flex items-center gap-2 text-[10px] font-black text-green-600 animate-bounce">
+                    <div className="flex items-center gap-2 text-[10px] font-black text-green-600">
                         <CheckCircle2 size={14}/> {successCount} Setores Sincronizados!
                     </div>
                 )}
               </div>
-              <textarea 
-                className="w-full flex-1 h-40 p-8 rounded-[2rem] border-2 border-emerald-100 outline-none focus:ring-8 focus:ring-emerald-600/5 font-mono text-xs resize-none bg-white shadow-inner" 
-                placeholder="Ex: 101; UTI ADULTO; HAB" 
-                value={pasteData} 
-                onChange={e => setPasteData(e.target.value)} 
-              />
-              <button 
-                onClick={() => handleProcess(pasteData)} 
-                disabled={isProcessing || !pasteData.trim()} 
-                className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all"
-              >
-                {isProcessing ? 'Sincronizando Estrutura...' : 'Atualizar Lista de Setores'}
+              <textarea className="w-full flex-1 h-40 p-8 rounded-[2rem] border-2 border-emerald-100 outline-none font-mono text-xs resize-none bg-white shadow-inner" placeholder="Ex: 101; UTI ADULTO; HAB" value={pasteData} onChange={e => setPasteData(e.target.value)} />
+              <button onClick={() => handleProcess(pasteData)} disabled={isProcessing || !pasteData.trim()} className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-700">
+                {isProcessing ? 'Trabalhando...' : 'Atualizar Lista de Setores'}
               </button>
           </div>
       </div>

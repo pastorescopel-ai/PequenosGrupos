@@ -43,7 +43,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs, setPgs }) => {
             }
 
             if (idRaw && pgName) {
-                // Lógica de ID estruturado: PREFIXO_ID (Ex: HAB_1, HABA_5)
+                // Geração de ID estruturado conforme pedido: ID_HAB ou ID_HABA
                 const finalId = `${prefix}_${idRaw}`;
                 const docRef = doc(db, "pgs", finalId);
                 
@@ -61,8 +61,7 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs, setPgs }) => {
         setPasteData('');
         setSuccessCount(count);
     } catch (e) {
-        console.error(e);
-        alert("Erro na importação dos PGs.");
+        alert("Erro ao importar PGs.");
     } finally {
         setIsProcessing(false);
     }
@@ -83,44 +82,32 @@ const ImportPGs: React.FC<ImportPGsProps> = ({ pgs, setPgs }) => {
           <div className="space-y-6">
             <div className="flex items-center gap-3 text-indigo-700">
                <Share2 size={28} />
-               <h4 className="text-xl font-black">Lista Mestra de PGs</h4>
+               <h4 className="text-xl font-black">Lista de PGs</h4>
             </div>
             <p className="text-xs text-slate-500 font-medium bg-white/70 p-5 rounded-[2rem] border border-indigo-100">
-              Formato: <span className="font-black text-indigo-700">ID ; PG ; UNIDADE</span><br/><br/>
-              O sistema criará IDs técnicos como <span className="italic font-bold text-blue-600">HAB_01</span> ou <span className="italic font-bold text-indigo-600">HABA_01</span>. Isso permite nomes iguais em unidades diferentes sem conflitos.
+              Esquema: <span className="font-black text-indigo-700">ID ; PG ; UNIDADE</span><br/><br/>
+              O sistema gera chaves como <span className="italic">HAB_01</span>. Renomear o PG na planilha atualizará o nome no banco sem criar duplicatas.
             </p>
 
-            <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full p-8 border-4 border-dashed border-indigo-200 rounded-[2.5rem] bg-white hover:bg-indigo-50 hover:border-indigo-400 transition-all group flex flex-col items-center gap-3"
-            >
+            <button onClick={() => fileInputRef.current?.click()} className="w-full p-8 border-4 border-dashed border-indigo-200 rounded-[2.5rem] bg-white hover:bg-indigo-50 hover:border-indigo-400 transition-all group flex flex-col items-center gap-3">
                 <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={onFileChange}/>
                 <Upload size={32} className="text-indigo-400 group-hover:scale-110 transition-transform" />
-                <span className="font-black text-[11px] uppercase text-indigo-600 tracking-widest">Upload PGs</span>
+                <span className="font-black text-[11px] uppercase text-indigo-600 tracking-widest">Subir Planilha</span>
             </button>
           </div>
 
           <div className="lg:col-span-2 flex flex-col gap-4">
               <div className="flex justify-between items-center px-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Colagem manual:</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Colagem:</label>
                 {successCount !== null && (
                     <div className="flex items-center gap-2 text-[10px] font-black text-indigo-600 animate-bounce">
-                        <CheckCircle2 size={14}/> {successCount} PGs Processados com Sucesso!
+                        <CheckCircle2 size={14}/> {successCount} PGs Processados!
                     </div>
                 )}
               </div>
-              <textarea 
-                className="w-full flex-1 h-40 p-8 rounded-[2rem] border-2 border-indigo-100 outline-none focus:ring-8 focus:ring-indigo-600/5 font-mono text-xs resize-none bg-white shadow-inner" 
-                placeholder="Exemplo: 1; PG Betel; HAB" 
-                value={pasteData} 
-                onChange={e => setPasteData(e.target.value)} 
-              />
-              <button 
-                onClick={() => handleProcess(pasteData)} 
-                disabled={isProcessing || !pasteData.trim()} 
-                className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all"
-              >
-                {isProcessing ? 'Sincronizando PGs...' : 'Sincronizar Lista de PGs'}
+              <textarea className="w-full flex-1 h-40 p-8 rounded-[2rem] border-2 border-indigo-100 outline-none font-mono text-xs resize-none bg-white shadow-inner" placeholder="Ex: 1; PG Betel; HAB" value={pasteData} onChange={e => setPasteData(e.target.value)} />
+              <button onClick={() => handleProcess(pasteData)} disabled={isProcessing || !pasteData.trim()} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-200 hover:bg-indigo-700">
+                {isProcessing ? 'Aguarde...' : 'Sincronizar Pequenos Grupos'}
               </button>
           </div>
       </div>

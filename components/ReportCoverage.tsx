@@ -7,8 +7,6 @@ import saveAs from 'file-saver';
 import { jsPDF } from 'jspdf';
 // @ts-ignore
 import html2canvas from 'html2canvas';
-// @ts-ignore
-import JSZip from 'jszip';
 
 import { Leader, ReportSettings, HospitalUnit, Sector, Collaborator, UnitLayout, PGMeetingPhoto } from '../types';
 import { GLOBAL_BRAND_LOGO, REPORT_SPECIFIC_LOGO } from '../assets_base64';
@@ -34,7 +32,6 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
   const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>(user.hospital);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [renderItems, setReportItemsToRender] = useState<any[]>([]);
-  const [printMode, setPrintMode] = useState<'sector' | 'pg'>('sector');
   
   // Filtros de Período
   const [startDate, setStartDate] = useState('');
@@ -63,30 +60,23 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
         ? sectors.filter(s => s.hospital === selectedUnit || !s.hospital)
         : sectors.filter(s => s.hospital === user.hospital || !s.hospital);
 
-    const items: any[] = [];
-    if (printMode === 'sector') {
-      targetSectors.forEach(sector => {
+    const items = targetSectors.map(sector => {
         const sectorMembers = members.filter(m => m.sector_name === sector.name && m.active !== false);
-        const sectorLeaders = leaders.filter(l => l.sector_name === sector.name && l.active && l.hospital === selectedUnit);
+        const sectorLeaders = leaders.filter(l => l.sector_name === sector.name && l.active);
         const uniqueMatriculas = new Set([...sectorMembers.map(m => m.employee_id), ...sectorLeaders.map(l => l.employee_id)]);
         const sectorRH = allCollaborators.filter(c => c.sector_name === sector.name && c.active);
         const denominator = sectorRH.length || 1;
-        items.push({ id: sector.id, code: sector.code, name: sector.name, denominator, numerator: uniqueMatriculas.size, coverage_percent: (uniqueMatriculas.size / denominator) * 100 });
-      });
-    } else {
-      const pgs = Array.from(new Set([...members.map(m => (m as any).pg_name), ...leaders.map(l => l.pg_name)])).filter(Boolean);
-      pgs.forEach(pgName => {
-        const pgMembers = members.filter(m => (m as any).pg_name === pgName && m.active !== false);
-        const pgLeaders = leaders.filter(l => l.pg_name === pgName && l.active);
-        const sectorName = pgMembers[0]?.sector_name || pgLeaders[0]?.sector_name;
-        if (!sectorName) return;
-        const uniqueMatriculas = new Set([...pgMembers.map(m => m.employee_id), ...pgLeaders.map(l => l.employee_id)]);
-        const sectorRH = allCollaborators.filter(c => c.sector_name === sectorName && c.active);
-        items.push({ id: `pg-${pgName}`, code: 'PG', name: pgName, denominator: sectorRH.length || 1, numerator: uniqueMatriculas.size, coverage_percent: (uniqueMatriculas.size / (sectorRH.length || 1)) * 100 });
-      });
-    }
+        return { 
+          id: sector.id, 
+          code: sector.code, 
+          name: sector.name, 
+          denominator, 
+          numerator: uniqueMatriculas.size, 
+          coverage_percent: (uniqueMatriculas.size / denominator) * 100 
+        };
+    });
     return items.sort((a, b) => a.name.localeCompare(b.name));
-  }, [sectors, members, allCollaborators, leaders, selectedUnit, isAdmin, printMode]);
+  }, [sectors, members, allCollaborators, leaders, selectedUnit, isAdmin]);
 
   const drawMasterFrame = (pdf: any, layout: UnitLayout, resolved: ResolvedAssets) => {
     pdf.setFillColor(layout.header_bg_color || '#ffffff');
@@ -97,7 +87,8 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
     if (startDate && endDate) {
       pdf.setFontSize(7);
       pdf.setTextColor(150, 150, 150);
-      pdf.text(`PERÍODO: ${new Date(startDate).toLocaleDateString()} A ${new Date(endDate).toLocaleDateString()}`, 200, 42, { align: 'right' });
+      const periodText = `PERÍODO DE REFERÊNCIA: ${new Date(startDate).toLocaleDateString()} A ${new Date(endDate).toLocaleDateString()}`;
+      pdf.text(periodText, 200, 42, { align: 'right' });
     }
 
     if (resolved.footer) pdf.addImage(resolved.footer, 'PNG', layout.footer.x, layout.footer.y, layout.footer.w, layout.footer.h);
@@ -156,42 +147,48 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
           {renderItems.map(item => (
               <div key={item.id} id={`rep-card-${item.id}`} style={{ width: '800px', padding: '40px' }} className="bg-white border-2 border-slate-200 rounded-[2rem] flex items-center justify-between">
                   <div className="flex-1">
-                      <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Setor / PG</p>
+                      <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Setor / Cobertura</p>
                       <h4 className="text-4xl font-black text-slate-900 uppercase">{item.name}</h4>
                       <div className="flex gap-10 mt-6">
-                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Ativos / RH</p><p className="text-2xl font-black">{item.numerator} / {item.denominator}</p></div>
-                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Cobertura</p><p className="text-2xl font-black text-green-600">{item.coverage_percent.toFixed(1)}%</p></div>
+                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Integrantes / Base RH</p><p className="text-2xl font-black">{item.numerator} / {item.denominator}</p></div>
+                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Índice</p><p className="text-2xl font-black text-green-600">{item.coverage_percent.toFixed(1)}%</p></div>
                       </div>
                   </div>
                   <div className="w-1 bg-slate-100 h-24 mx-10"></div>
-                  <div className="text-center w-32"><span className="text-4xl">🛡️</span><p className="text-[8px] font-black text-slate-300 mt-2 uppercase">PG Hospital</p></div>
+                  <div className="text-center w-32"><span className="text-4xl">👥</span><p className="text-[8px] font-black text-slate-300 mt-2 uppercase">Pequenos Grupos</p></div>
               </div>
           ))}
       </div>
 
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Emissão de Relatórios</h2>
-          <p className="text-slate-500 font-medium">Selecione o período e unidade para gerar os documentos oficiais.</p>
+          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Relatórios de Cobertura</h2>
+          <p className="text-slate-500 font-medium">Extraia os índices de participação por setor.</p>
         </div>
       </header>
 
-      {/* FILTROS */}
+      {/* FILTROS DE PERÍODO */}
       <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
         <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade Hospitalar</label>
             <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value as HospitalUnit)} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
                 <option value="Belém">Belém</option>
                 <option value="Barcarena">Barcarena</option>
             </select>
         </div>
         <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Início</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Inicial</label>
+            <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full pl-12 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+            </div>
         </div>
         <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Fim</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Final</label>
+            <div className="relative">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full pl-12 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+            </div>
         </div>
       </div>
 
@@ -199,8 +196,8 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
           <table className="w-full text-left">
               <thead className="bg-slate-50 border-b border-slate-100">
                   <tr className="text-slate-400 font-black uppercase text-[10px] tracking-widest">
-                      <th className="py-6 px-10">Entidade</th>
-                      <th className="py-6 px-4">Cobertura</th>
+                      <th className="py-6 px-10">Setor Hospitalar</th>
+                      <th className="py-6 px-4">Cobertura %</th>
                       <th className="py-6 px-10 text-right">Ação</th>
                   </tr>
               </thead>
@@ -209,12 +206,12 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings
                       <tr key={item.id} className="hover:bg-slate-50 transition-all">
                           <td className="py-8 px-10">
                               <p className="font-black text-slate-800 text-lg uppercase">{item.name}</p>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">ID: {item.code}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Código RH: {item.code}</p>
                           </td>
                           <td className="py-8 px-4">
                               <div className="flex items-center gap-4">
                                   <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className="h-full bg-green-500" style={{ width: `${Math.min(item.coverage_percent, 100)}%` }}></div>
+                                      <div className={`h-full ${item.coverage_percent >= 80 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }}></div>
                                   </div>
                                   <span className="font-black text-slate-700">{item.coverage_percent.toFixed(1)}%</span>
                               </div>

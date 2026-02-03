@@ -33,12 +33,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ mode, onSubmit, onToggleMode, i
       setIsSubmitting(false);
   };
 
-  const handleForgotPasswordClick = () => {
-    if (onForgotPassword) {
-      onForgotPassword(email);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8] p-4 md:p-6 relative overflow-hidden text-left font-sans">
       <div className="absolute top-0 left-0 w-full h-full bg-[url('https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80')] bg-cover opacity-[0.03] pointer-events-none"></div>
@@ -55,25 +49,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ mode, onSubmit, onToggleMode, i
             )}
           </div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Pequenos Grupos</h2>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Gestão Ministerial Hospitalar</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-2">Gestão Hospitalar</p>
         </div>
         
         <form className="space-y-5" onSubmit={handleSubmit}>
           {!isConfigValid && (
             <div className="bg-red-50 p-4 rounded-2xl border border-red-100 flex items-center gap-4 mb-4">
                <span className="text-2xl">🔌</span>
-               <p className="text-[10px] text-red-800 font-bold leading-tight">
-                 <b>Offline:</b> Banco de dados desconectado.
-               </p>
+               <p className="text-[10px] text-red-800 font-bold leading-tight"><b>Offline:</b> Banco de dados desconectado.</p>
             </div>
           )}
 
           {error && (
             <div className="bg-red-50 p-4 rounded-2xl border border-red-100 flex items-center gap-4 mb-4 animate-in slide-in-from-top-2 fade-in">
                <span className="text-2xl filter drop-shadow-sm">🚫</span>
-               <p className="text-xs text-red-700 font-bold leading-tight">
-                 {error}
-               </p>
+               <p className="text-xs text-red-700 font-bold leading-tight">{error}</p>
             </div>
           )}
 
@@ -91,17 +81,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ mode, onSubmit, onToggleMode, i
                 disabled={!isConfigValid} 
                 className="w-full pl-14 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold focus:border-blue-500 focus:bg-white transition-all text-slate-800 disabled:opacity-50 text-sm placeholder:text-slate-300" 
                 placeholder="nome@hospital.com"
-                autoComplete="username"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex justify-between px-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {mode === 'login' ? 'Senha' : 'Crie sua Senha'}
-                </label>
-            </div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Senha</label>
             <div className="relative group">
               <div className="absolute left-0 top-0 bottom-0 w-14 flex items-center justify-center text-slate-300 group-focus-within:text-blue-500 transition-colors">
                  <KeyRound size={20}/>
@@ -114,7 +99,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ mode, onSubmit, onToggleMode, i
                  disabled={!isConfigValid} 
                  className="w-full pl-14 pr-14 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold focus:border-blue-500 focus:bg-white transition-all text-slate-800 disabled:opacity-50 text-sm placeholder:text-slate-300" 
                  placeholder="••••••••"
-                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               />
               <button 
                 type="button"
@@ -126,9 +110,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ mode, onSubmit, onToggleMode, i
             </div>
           </div>
           
-          <button type="submit" disabled={!isConfigValid || isSubmitting} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 mt-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+          <button type="submit" disabled={!isConfigValid || isSubmitting} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 mt-4 disabled:opacity-50 flex items-center justify-center gap-2">
             {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : (
-                mode === 'login' ? <>Entrar <ArrowRight size={16}/></> : <>Confirmar Cadastro <span className="text-base">✨</span></>
+                mode === 'login' ? <>Entrar <ArrowRight size={16}/></> : <>Criar Conta <span className="text-base">✨</span></>
             )}
           </button>
 
