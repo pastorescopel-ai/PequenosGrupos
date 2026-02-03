@@ -1,149 +1,224 @@
 
-export type HospitalUnit = 'Belém' | 'Barcarena';
-export type UserStatus = 'pending' | 'approved' | 'rejected';
-export type DayOfWeek = 'Segunda-feira' | 'Terça-feira' | 'Quarta-feira' | 'Quinta-feira' | 'Sexta-feira' | 'Sábado' | 'Domingo';
-export type ChaplainStatus = 'none' | 'pending' | 'confirmed' | 'declined';
-export type UserRole = 'LIDER' | 'CAPELAO' | 'ADMIN';
-
-export type InactivationReason = 'Desistência do PG' | 'Demissão' | 'Transferência de Setor' | 'Afastamento/Licença' | 'Mudança de turno' | 'Promoção' | 'Outros';
-
-export interface ElementPosition {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  CHAPLAIN = 'CHAPLAIN'
 }
 
-export interface UnitLayout {
-  header: ElementPosition;
-  header_bg_color?: string;
-  footer: ElementPosition;
-  signature: ElementPosition;
-  director_name_pos: ElementPosition;
-  director_title_pos: ElementPosition;
-  content_y: number;
+export enum Unit {
+  HAB = 'HAB',
+  HABA = 'HABA'
 }
 
-export interface Sector {
+export enum RecordStatus {
+  INICIO = 'Início',
+  CONTINUACAO = 'Continuação',
+  TERMINO = 'Término'
+}
+
+export enum ParticipantType {
+  STAFF = 'Colaborador',
+  PATIENT = 'Paciente',
+  PROVIDER = 'Prestador'
+}
+
+export enum VisitReason {
+  AGENDAMENTO = 'Agendamento',
+  SOLICITACAO = 'Solicitação',
+  ROTINA = 'Rotina',
+  ACOMPANHAMENTO = 'ACOMPANHAMENTO',
+  OUTROS = 'Outros'
+}
+
+export enum ActivityFilter {
+  TODAS = 'Todas',
+  ESTUDOS = 'Estudos Bíblicos',
+  CLASSES = 'Classes Bíblicas',
+  PGS = 'Pequenos Grupos',
+  VISITAS = 'Visitas'
+}
+
+// --- TIPOS PRO ---
+export interface ProSector {
   id: string;
-  code: string;
   name: string;
-  active: boolean;
-  created_at: string;
-  hospital?: HospitalUnit;
+  unit: Unit;
+  active?: boolean;
+  updatedAt?: number;
 }
 
-export interface PG {
+export interface ProStaff {
   id: string;
   name: string;
-  active: boolean;
-  hospital?: HospitalUnit;
+  sectorId: string;
+  unit: Unit;
+  active?: boolean;
+  updatedAt?: number;
+}
+
+export interface ProGroup {
+  id: string;
+  name: string;
+  currentLeader?: string;
+  leader?: string;
+  sectorId?: string;
+  unit: Unit;
+  active?: boolean;
+  updatedAt?: number;
+}
+
+export interface Config {
+  id?: string;
+  muralText: string;
+  headerLine1: string;
+  headerLine2: string;
+  headerLine3: string;
+  fontSize1: number;
+  fontSize2: number;
+  fontSize3: number;
+  reportLogoWidth: number;
+  reportLogoX: number;
+  reportLogoY: number;
+  headerLine1X: number;
+  headerLine1Y: number;
+  headerLine2X: number;
+  headerLine2Y: number;
+  headerLine3X: number;
+  headerLine3Y: number;
+  headerPaddingTop: number;
+  headerTextAlign: 'left' | 'center' | 'right';
+  primaryColor: string;
+  appLogoUrl?: string;
+  reportLogoUrl?: string;
+  lastModifiedBy?: string;
+  lastModifiedAt?: number;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  password?: string;
+  role: UserRole;
+  profilePic?: string;
+}
+
+export interface MasterLists {
+  id?: string;
+  sectorsHAB: string[];
+  sectorsHABA: string[];
+  groupsHAB: string[];
+  groupsHABA: string[];
+  staffHAB: string[];
+  staffHABA: string[];
+  updatedAt?: number;
+}
+
+export interface BibleStudy {
+  id: string;
+  userId: string;
+  date: string;
+  unit: Unit;
+  sector: string;
+  name: string;
+  whatsapp: string;
+  status: RecordStatus;
+  participantType?: ParticipantType;
+  guide: string;
+  lesson: string;
+  observations: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface BibleClass {
+  id: string;
+  userId: string;
+  date: string;
+  unit: Unit;
+  sector: string;
+  students: string[];
+  status: RecordStatus;
+  participantType?: ParticipantType;
+  guide: string;
+  lesson: string;
+  observations: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface SmallGroup {
+  id: string;
+  userId: string;
+  date: string;
+  unit: Unit;
+  sector: string;
+  groupName: string;
+  leader: string;
+  shift: string;
+  participantsCount: number;
+  observations: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface StaffVisit {
+  id: string;
+  userId: string;
+  date: string;
+  unit: Unit;
+  sector: string;
+  reason: VisitReason;
+  staffName: string;
+  requiresReturn: boolean;
+  returnDate?: string;
+  returnCompleted: boolean;
+  observations: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface VisitRequest {
+  id: string;
+  pgName: string;
+  leaderName: string;
+  leaderPhone?: string;
+  unit: 'HAB' | 'HABA';
+  date: string;
+  status: 'pending' | 'confirmed' | 'declined' | 'assigned';
+  requestNotes?: string;
+  preferredChaplainId?: string;
+  assignedChaplainId?: string;
+  chaplainResponse?: string;
+  isRead: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Leader {
+  full_name: string;
+  whatsapp?: string;
+  pg_name?: string;
+  sector_name?: string;
+  hospital?: string;
 }
 
 export interface Chaplain {
   id: string;
-  employee_id: string;
   name: string;
-  hospital: HospitalUnit;
   active: boolean;
-  email?: string;
-  whatsapp?: string;
+  hospital: string;
 }
 
 export interface MeetingSchedule {
-  leader_id: string;
-  leader_name?: string;
-  leader_whatsapp?: string;
-  pg_name?: string;
-  sector_name?: string;
-  hospital?: HospitalUnit;
-  full_date: string; 
-  updated_at: string;
+  full_date: string;
   request_chaplain: boolean;
   request_notes?: string;
   preferred_chaplain_id?: string;
   assigned_chaplain_id?: string;
-  chaplain_status: ChaplainStatus;
-  chaplain_response?: string;
-  chaplain_assigned_name?: string;
-}
-
-export interface Leader {
-  id: string;
-  full_name: string;
-  employee_id: string;
-  sector_id?: string;
+  chaplain_status: 'none' | 'pending' | 'confirmed' | 'declined';
+  leader_name: string;
+  leader_whatsapp?: string;
+  pg_name: string;
   sector_name?: string;
-  pg_name?: string;
-  hospital: HospitalUnit;
-  email?: string;
-  whatsapp?: string;
-  is_admin: boolean;
-  role: UserRole;
-  status: UserStatus;
-  active: boolean;
-  needs_password_change?: boolean;
-  photo_url?: string;
-  browser_notifications_enabled?: boolean;
-}
-
-export interface ReportSettings {
-  director_name: string;
-  director_title: string;
-  footer_text: string;
-  template_belem_url?: string;
-  template_barcarena_url?: string;
-  footer_belem_url?: string;
-  footer_barcarena_url?: string;
-  signature_url?: string;
-  layout?: {
-    belem: UnitLayout;
-    barcarena: UnitLayout;
-  };
-}
-
-export interface ChangeRequest {
-  id: string;
-  leader_id: string;
-  leader_name?: string;
-  collaborator_id: string;
-  collaborator_name?: string;
-  collaborator_sector?: string;
-  type: 'add' | 'remove';
-  reason_category: string;
-  status: 'pending' | 'approved' | 'rejected';
-  created_at: string;
-  admin_notes?: string;
-}
-
-export interface Collaborator {
-  id: string;
-  full_name: string;
-  employee_id: string;
-  sector_id: string;
-  sector_name: string;
-  active: boolean;
-  join_date?: string;
-  hospital?: HospitalUnit;
-  pg_name?: string;
-}
-
-export interface PGMeetingPhoto {
-  id: string;
-  url: string;
-  description: string;
-  uploaded_at: string;
-  week_number: number;
-  leader_id: string;
-}
-
-export interface CoverageStats {
-  sector_id: string;
-  sector_code: string;
-  sector_name: string;
-  denominator: number;
-  numerator: number;
-  coverage_percent: number;
-  meeting_day?: string;
-  meeting_time?: string;
+  hospital?: string;
 }

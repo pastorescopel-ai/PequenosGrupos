@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, Calendar, X, AlertTriangle, Users, CalendarX2, UserX } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Clock, Calendar, X, User, AlertTriangle, Check } from 'lucide-react';
 import { MeetingSchedule, Chaplain, Leader } from '../types';
-import { notifyChaplaincyOfNewInvite } from '../services/chaplaincyBridge';
+import { sendChaplainInvite } from '../services/chaplaincyService';
 
 interface MeetingScheduleModalProps {
   user: Leader;
@@ -21,108 +21,74 @@ const MeetingScheduleModal: React.FC<MeetingScheduleModalProps> = ({
   const [preferredId, setPreferredId] = useState(currentSchedule?.preferred_chaplain_id || '');
   const [requestNotes, setRequestNotes] = useState(currentSchedule?.request_notes || '');
   const [isSaving, setIsSaving] = useState(false);
-  
-  const [conflictAlert, setConflictAlert] = useState<{ name: string, pg: string, availableAt: string } | null>(null);
 
-  // Segurança: Funcionalidade restrita à unidade Belém
-  const isBelem = user.hospital === 'Belém';
+  // Normalização do Hospital
+  const isBelem = user.hospital === 'Belém' || user.hospital === 'HAB';
 
-  const isWeekend = (dateString: string) => {
-    if (!dateString) return false;
-    const d = new Date(dateString);
-    const day = d.getDay();
-    return day === 0 || day === 6; 
+  const checkConflict = (chaplainId: string) => {
+    if (!date) return false;
+    return allSchedules.some(s => 
+      s.assigned_chaplain_id === chaplainId && 
+      s.full_date === date && 
+      (s.chaplain_status === 'confirmed' || s.chaplain_status === 'pending')
+    );
   };
-
-  const isWeekendSelected = isWeekend(date);
-  const CONFLICT_WINDOW_MS = 30 * 60 * 1000; 
-
-  const getConflict = (chaplainId: string) => {
-    if (!date) return undefined;
-    const proposedTime = new Date(date).getTime();
-    return allSchedules.find(s => {
-      if (s.leader_id === user.id) return false;
-      if (s.assigned_chaplain_id !== chaplainId) return false;
-      if (s.chaplain_status === 'confirmed') return true; 
-      const existingTime = new Date(s.full_date).getTime();
-      const diff = Math.abs(existingTime - proposedTime);
-      return diff < CONFLICT_WINDOW_MS;
-    });
-  };
-
-  const { areAllBusy, activeUnitChaplains } = useMemo(() => {
-    if (!date) return { areAllBusy: false, activeUnitChaplains: [] };
-    const activeChaplains = chaplains.filter(c => c.active);
-    if (activeChaplains.length === 0) return { areAllBusy: false, activeUnitChaplains: [] };
-    const busyCount = activeChaplains.filter(c => !!getConflict(c.id)).length;
-    return { 
-        activeUnitChaplains: activeChaplains,
-        areAllBusy: busyCount === activeChaplains.length 
-    };
-  }, [date, chaplains, allSchedules]);
 
   useEffect(() => {
-    if (isWeekendSelected || areAllBusy) {
-        setRequestChaplain(false);
-        setPreferredId('');
-        setConflictAlert(null);
+    if (date && date !== currentSchedule?.full_date && !requestChaplain && !isBelem) {
+      handleAutoSave();
     }
-  }, [date, areAllBusy, isWeekendSelected]);
+  }, [date]);
 
-  const handleChaplainClick = (chaplain: Chaplain, conflictSchedule?: MeetingSchedule) => {
-      if (conflictSchedule) {
-          if (preferredId === chaplain.id) setPreferredId('');
-          const conflictTime = new Date(conflictSchedule.full_date);
-          const availableTime = new Date(conflictTime.getTime() + CONFLICT_WINDOW_MS);
-          const availableString = availableTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          setConflictAlert({
-              name: chaplain.name,
-              pg: conflictSchedule.pg_name || 'Outro PG',
-              availableAt: availableString
-          });
-      } else {
-          setConflictAlert(null);
-          setPreferredId(prev => prev === chaplain.id ? '' : chaplain.id);
-      }
+  const handleAutoSave = () => {
+    setIsSaving(true);
+    onSave({ 
+      full_date: date, 
+      request_chaplain: false,
+      chaplain_status: 'none',
+      leader_name: user.full_name,
+      leader_whatsapp: user.whatsapp,
+      pg_name: user.pg_name || `PG ${user.sector_name || 'Setor'}`,
+      sector_name: user.sector_name,
+      hospital: user.hospital
+    });
+    setTimeout(onClose, 400);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!date) return;
-    
-    if (isBelem && requestChaplain) {
-        if (preferredId) {
-            const conflict = getConflict(preferredId);
-            if (conflict) return;
-        }
-        if (!preferredId && areAllBusy) return;
-    }
-
     setIsSaving(true);
-    const finalRequestChaplain = (isWeekendSelected || areAllBusy) ? false : (isBelem ? requestChaplain : false);
-    const newStatus = finalRequestChaplain ? 'pending' : 'none';
-
-    // Ponte com o App de Capelania (Supabase)
-    if (finalRequestChaplain) {
-        await notifyChaplaincyOfNewInvite({
-            pg_name: user.pg_name || `PG ${user.sector_name || 'Setor'}`,
+    
+    // --- LÓGICA DE INTEGRAÇÃO ---
+    if (isBelem && requestChaplain) {
+        // Mapeia os dados do App PG para o formato esperado pelo Supabase da Capelania
+        const invitePayload = {
+            pg_name: user.pg_name || `PG ${user.sector_name || 'Sem Setor'}`,
             leader_name: user.full_name,
             leader_phone: user.whatsapp || '',
-            unit: 'HAB', // Apenas Belém envia por enquanto
+            unit: 'HAB' as const, // Força o tipo para 'HAB' pois isBelem é true
             date: new Date(date).toISOString(),
             request_notes: requestNotes,
             preferred_chaplain_id: preferredId || undefined
-        });
-    }
+        };
 
+        // Envia para a nuvem sem travar a UI (Fire & Forget com catch)
+        sendChaplainInvite(invitePayload)
+          .then(success => {
+             if(success) console.log("Convite enviado com sucesso!");
+             else console.warn("Erro ao enviar convite, mas salvando localmente.");
+          });
+    }
+    // ----------------------------
+
+    // Salva localmente no App de PGs
     onSave({ 
       full_date: date, 
-      request_chaplain: finalRequestChaplain,
-      request_notes: finalRequestChaplain ? requestNotes : undefined,
-      preferred_chaplain_id: finalRequestChaplain ? preferredId : undefined,
-      chaplain_status: newStatus,
-      assigned_chaplain_id: null,
-      chaplain_response: null,
+      request_chaplain: isBelem ? requestChaplain : false,
+      request_notes: isBelem ? requestNotes : undefined,
+      preferred_chaplain_id: isBelem && requestChaplain ? preferredId : undefined,
+      chaplain_status: (isBelem && requestChaplain) ? 'pending' : 'none',
       leader_name: user.full_name,
       leader_whatsapp: user.whatsapp,
       pg_name: user.pg_name || `PG ${user.sector_name || 'Setor'}`,
@@ -130,15 +96,20 @@ const MeetingScheduleModal: React.FC<MeetingScheduleModalProps> = ({
       hospital: user.hospital
     });
     
-    setTimeout(() => onClose(), 500);
+    setTimeout(() => {
+        onClose();
+    }, 500);
   };
 
-  if (!isBelem) return null;
-
   return (
-    <div className="fixed inset-0 bg-blue-950/80 backdrop-blur-md z-[210] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[210]">
+      {/* Backdrop */}
+      <div className="fixed inset-0 bg-blue-950/80 backdrop-blur-md" onClick={onClose} />
+      
+      {/* Modal Box - Real Center */}
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white w-full max-w-lg max-h-[90vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
         
+        {/* Header */}
         <div className="p-8 pb-4 flex justify-between items-start border-b border-slate-50">
           <div>
             <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
@@ -146,12 +117,13 @@ const MeetingScheduleModal: React.FC<MeetingScheduleModalProps> = ({
             </h3>
             <p className="text-slate-500 font-medium text-xs mt-1">Defina a data do encontro semanal.</p>
           </div>
-          <button onClick={onClose} className="p-3 bg-slate-100 text-slate-400 rounded-xl hover:text-slate-800 transition-all"><X size={20}/></button>
+          <button onClick={onClose} className="p-2 bg-slate-100 text-slate-400 rounded-xl hover:text-slate-800 transition-all"><X size={20}/></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-8 no-scrollbar">
           <form onSubmit={handleSubmit} className="space-y-8">
             
+            {/* Input de Data */}
             <div className="space-y-3">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Data e Hora do Encontro</label>
               <div className="relative">
@@ -160,111 +132,85 @@ const MeetingScheduleModal: React.FC<MeetingScheduleModalProps> = ({
                   type="datetime-local" 
                   value={date}
                   onChange={e => setDate(e.target.value)}
-                  className={`w-full pl-16 pr-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl text-slate-800 outline-none focus:ring-4 focus:ring-blue-600/10 transition-all`}
+                  className={`w-full pl-16 pr-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl text-slate-800 outline-none focus:ring-4 focus:ring-blue-600/10 transition-all ${isSaving && !requestChaplain ? 'border-green-500 bg-green-50' : ''}`}
                   required
                 />
+                {isSaving && !requestChaplain && (
+                  <div className="absolute right-6 top-1/2 -translate-y-1/2 text-green-500 animate-in fade-in">
+                    <Check size={24} />
+                  </div>
+                )}
               </div>
             </div>
 
-            {isWeekendSelected && (
-                <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl">
-                    <div className="flex gap-3">
-                        <CalendarX2 className="text-amber-600 shrink-0" size={24} />
-                        <div>
-                            <p className="text-xs font-black text-amber-800 uppercase mb-1">Aviso de Fim de Semana</p>
-                            <p className="text-xs text-amber-700 font-medium leading-relaxed">
-                                A Capelania não possui escala oficial aos Sábados e Domingos.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {!isWeekendSelected && (
+            {/* Seção de Capelania (Apenas Belém/HAB) */}
+            {isBelem && (
               <div className="pt-6 border-t border-slate-100 space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Escala Pastoral</h4>
                 
-                {areAllBusy ? (
-                   <div className="bg-orange-50 border-2 border-orange-100 p-5 rounded-2xl shadow-sm">
-                      <div className="flex gap-3">
-                          <UserX className="text-orange-500 shrink-0" size={28} />
-                          <div>
-                              <p className="text-sm font-black text-orange-800 uppercase mb-1">Agenda Lotada</p>
-                              <p className="text-xs text-orange-700 font-medium leading-relaxed">
-                                  Todos os capelães estão em atendimento neste horário exato.
-                              </p>
-                          </div>
-                      </div>
+                {/* Checkbox de Ativação */}
+                <label className={`flex items-start gap-4 p-5 rounded-2xl border-2 transition-all cursor-pointer ${
+                  requestChaplain ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 bg-white hover:border-slate-200'
+                }`}>
+                   <input type="checkbox" className="mt-1 w-5 h-5 rounded accent-blue-600" checked={requestChaplain} onChange={e => setRequestChaplain(e.target.checked)} />
+                   <div>
+                     <span className="text-sm font-black text-slate-800 block">Solicitar Presença Pastoral</span>
+                     <span className="text-[10px] text-slate-500 font-medium italic">O sistema enviará um convite oficial à Capelania.</span>
                    </div>
-                ) : (
-                  <>
-                    <label className={`flex items-start gap-4 p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                      requestChaplain ? 'border-blue-600 bg-blue-50/50' : 'border-slate-100 bg-white hover:border-slate-200'
-                    }`}>
-                       <input type="checkbox" className="mt-1 w-5 h-5 rounded accent-blue-600" checked={requestChaplain} onChange={e => setRequestChaplain(e.target.checked)} />
-                       <div>
-                         <span className="text-sm font-black text-slate-800 block">Solicitar Presença Pastoral</span>
-                         <span className="text-[10px] text-slate-500 font-medium italic">Isso enviará um convite oficial via Supabase para a Capelania.</span>
-                       </div>
-                    </label>
+                </label>
 
-                    {requestChaplain && (
-                      <div className="space-y-6 animate-in slide-in-from-top-2">
-                        {conflictAlert && (
-                            <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl">
-                                <div className="flex gap-3 items-start">
-                                    <AlertTriangle className="text-red-600 shrink-0 mt-1" size={24} />
-                                    <div>
-                                        <p className="text-sm font-black text-red-800 uppercase mb-1">Capelão Indisponível</p>
-                                        <p className="text-xs text-red-700 font-medium leading-relaxed">{conflictAlert.name} já está confirmado no {conflictAlert.pg}.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-2">Sugerir Capelão</label>
-                          <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
+                {/* Opções Extras se Ativado */}
+                {requestChaplain && (
+                  <div className="space-y-6 animate-in slide-in-from-top-2 duration-300">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-2">Sugerir Capelão (Opcional)</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {chaplains.filter(c => c.active && (c.hospital === 'Belém' || c.hospital === 'HAB')).map(c => {
+                          const conflict = checkConflict(c.id);
+                          return (
                             <button 
-                                type="button"
-                                onClick={() => { setConflictAlert(null); setPreferredId(''); }}
-                                className={`flex items-center justify-between p-4 rounded-xl border transition-all ${preferredId === '' ? 'bg-slate-800 text-white shadow-md' : 'bg-white text-slate-500'}`}
+                              key={c.id}
+                              type="button"
+                              onClick={() => !conflict && setPreferredId(c.id === preferredId ? '' : c.id)}
+                              className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                                conflict ? 'bg-red-50 border-red-100 opacity-60 cursor-not-allowed' :
+                                preferredId === c.id ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-slate-100 hover:border-blue-200'
+                              }`}
                             >
-                                <Users size={16} /> <span className="text-sm font-bold">Sem preferência</span>
+                              <div className="flex items-center gap-3 text-left">
+                                <User size={16} />
+                                <span className="text-sm font-bold">{c.name}</span>
+                              </div>
+                              {conflict && (
+                                <span className="text-[8px] font-black uppercase bg-red-600 text-white px-3 py-1 rounded-full flex items-center gap-1.5">
+                                  <AlertTriangle size={10}/> Já convidado
+                                </span>
+                              )}
                             </button>
-
-                            {activeUnitChaplains.map(c => {
-                              const conflictSchedule = getConflict(c.id);
-                              const hasConflict = !!conflictSchedule;
-                              return (
-                                <button 
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => handleChaplainClick(c, conflictSchedule as any)}
-                                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${hasConflict ? 'bg-slate-50 text-slate-400 opacity-60' : preferredId === c.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-700'}`}
-                                >
-                                  <span className="text-sm font-bold">{c.name}</span>
-                                  {hasConflict && <span className="text-[8px] font-black uppercase bg-red-100 text-red-600 px-2 py-1 rounded-full">Ocupado</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <textarea 
-                          value={requestNotes}
-                          onChange={e => setRequestNotes(e.target.value)}
-                          placeholder="Pedidos de oração ou observações..."
-                          className="w-full h-24 p-4 bg-blue-50/30 border border-blue-100 rounded-xl text-sm font-medium outline-none resize-none"
-                        />
+                          );
+                        })}
                       </div>
-                    )}
-                  </>
+                    </div>
+                    
+                    <textarea 
+                      value={requestNotes}
+                      onChange={e => setRequestNotes(e.target.value)}
+                      placeholder="Algum motivo especial ou pedido de oração?"
+                      className="w-full h-24 p-4 bg-blue-50/30 border border-blue-100 rounded-xl text-sm font-medium outline-none resize-none placeholder-blue-300"
+                    />
+                  </div>
                 )}
               </div>
             )}
 
-            <button type="submit" disabled={isSaving || !date || (requestChaplain && !!conflictAlert) || (requestChaplain && areAllBusy)} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3">
-              {isSaving ? 'Notificando Capelania...' : 'Confirmar e Notificar'}
+            {/* Botão Salvar */}
+            <button type="submit" disabled={isSaving || !date} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50">
+              {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    {requestChaplain ? 'Enviando Convite...' : 'Registrando...'}
+                  </>
+              ) : 'Confirmar e Fechar'}
             </button>
           </form>
         </div>

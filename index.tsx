@@ -1,7 +1,14 @@
+// ############################################################
+// # SYSTEM ENTRY POINT - REVOLUTION V2.0 (MODULAR)
+// # ARCHITECTURE: REPOSITORY + CONTEXT API + AUTH ISOLATION
+// ############################################################
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { AppProvider } from './contexts/AppContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +18,12 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <AppProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </ToastProvider>
+    </AppProvider>
   </React.StrictMode>
 );

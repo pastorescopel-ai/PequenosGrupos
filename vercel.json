@@ -1,8 +1,9 @@
+
 {
-  "crons": [
+  "rewrites": [
     {
-      "path": "/api/cron/generate-sector-reports?token=CRON_SECRET",
-      "schedule": "0 0 * * 1"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
