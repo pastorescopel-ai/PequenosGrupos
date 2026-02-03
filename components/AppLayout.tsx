@@ -33,10 +33,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({
       case 'members': return 'Membros';
       case 'reports': return 'Relatórios';
       case 'admin': return 'Líderes';
-      case 'sys-admins': return 'Administradores';
+      case 'profile': return 'Perfil';
       case 'import': return 'Base de Dados';
       case 'settings': return 'Configurações';
-      case 'profile': return 'Perfil';
+      case 'sys-admins': return 'Administradores';
       default: return 'Pequenos Grupos';
     }
   };

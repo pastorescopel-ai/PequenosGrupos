@@ -59,7 +59,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         c.active && 
         (c.full_name.toLowerCase().includes(lowerTerm) || 
          c.employee_id.includes(searchTerm))
-      ).slice(0, 5);
+      ).slice(0, 20); // Aumentado para 20 resultados
       setSearchResults(filtered);
       setShowResults(true);
     } else {
@@ -75,7 +75,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         const filtered = sectors.filter(s => 
             (s.hospital === formData.hospital || !s.hospital) && // Filtra pela unidade
             (s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower))
-        ).slice(0, 5);
+        ).slice(0, 10);
         setSectorResults(filtered);
         setShowSectorResults(true);
     } else {
@@ -183,7 +183,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
               </div>
 
               {showResults && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[110] animate-in slide-in-from-top-2">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[110] animate-in slide-in-from-top-2 max-h-72 overflow-y-auto custom-scrollbar">
                   {searchResults.map(collab => (
                     <button
                       key={collab.id}
@@ -196,7 +196,8 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                       </div>
                       <div className="flex-1">
                         <p className="font-black text-slate-800 text-sm">{collab.full_name}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Mat: {collab.employee_id} • {collab.sector_name}</p>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase font-black">SETOR: {collab.sector_name}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase">Matrícula: {collab.employee_id}</p>
                       </div>
                       <UserCheck size={16} className="text-slate-300 group-hover:text-blue-600" />
                     </button>
