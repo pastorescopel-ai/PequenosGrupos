@@ -16,6 +16,8 @@ import AppLayout from './components/AppLayout';
 import AuthScreen from './components/AuthScreen';
 import MainContent from './components/MainContent';
 
+const ADMIN_EMAIL = "pastorescopel@gmail.com";
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -83,13 +85,24 @@ const App: React.FC = () => {
     safeDbAction
   } = useFirestoreData(currentUser);
 
-  // ELITE_INTEGRITY_SHIELD_V32: Salvamento via ID direto para garantir persistência total
+  // MASTER_PROFILE_PERSIST_V34 & V35: Salvamento blindado
   const handleUpdateUser = async (updatedData: Partial<Leader>) => {
     if (!currentUser) return;
     await safeDbAction(async () => {
        const leaderDocRef = doc(db, "leaders", currentUser.id);
-       await setDoc(leaderDocRef, updatedData, { merge: true });
-       setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
+       
+       // EMERGENCY_V35: Proteção absoluta para o papel de ADMIN do Master
+       const isMaster = currentUser.email?.toLowerCase().trim() === ADMIN_EMAIL.toLowerCase();
+       
+       const finalUpdate = {
+         ...updatedData,
+         email: currentUser.email, // Garante rastro
+         role: isMaster ? 'ADMIN' : (updatedData.role || currentUser.role),
+         is_admin: isMaster ? true : (updatedData.is_admin ?? currentUser.is_admin)
+       };
+
+       await setDoc(leaderDocRef, finalUpdate, { merge: true });
+       setCurrentUser(prev => prev ? { ...prev, ...finalUpdate } : null);
     });
   };
 
