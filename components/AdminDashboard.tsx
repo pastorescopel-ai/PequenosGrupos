@@ -111,14 +111,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <AdminStatCard label="Membros HAB" value={stats.belem.active} emoji="👥" color="from-blue-50/50 to-blue-100/50" />
                   <AdminStatCard label="Setores HAB" value={stats.belem.sectors} emoji="🏢" color="from-slate-50 to-slate-100" />
               </div>
-              {/* BARRA DE PROGRESSO HAB */}
+              {/* BARRA DE PROGRESSO HAB COM HEADCOUNT V42 */}
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="flex justify-between items-end mb-4 relative z-10">
                       <div>
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Adesão Ministerial HAB</p>
-                          <p className="text-[9px] font-bold text-blue-600/60 uppercase">Meta Institucional: 80%</p>
+                          {/* HEADCOUNT STATS BELÉM */}
+                          <div className="flex items-center gap-2 mt-1.5 bg-blue-50/50 w-fit px-3 py-1 rounded-full border border-blue-100">
+                              <Users size={12} className="text-blue-600" />
+                              <p className="text-[11px] font-black text-blue-900">{stats.belem.active} <span className="text-blue-300 font-bold">/ {stats.belem.rh}</span></p>
+                          </div>
                       </div>
-                      <p className="text-3xl font-black text-blue-600">{stats.belem.coverage.toFixed(1)}%</p>
+                      <div className="text-right">
+                          <p className="text-3xl font-black text-blue-600">{stats.belem.coverage.toFixed(1)}%</p>
+                          <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Meta: 80%</p>
+                      </div>
                   </div>
                   <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex items-center px-1 relative z-10">
                       <div 
@@ -126,6 +133,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         style={{ width: `${Math.min(stats.belem.coverage, 100)}%` }}
                       ></div>
                   </div>
+                  <p className="mt-3 text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] relative z-10 italic">
+                      HAB: {stats.belem.rh} colaboradores ativos na base oficial
+                  </p>
                   <div className="absolute -right-4 -bottom-4 text-6xl opacity-[0.03] group-hover:scale-110 transition-transform">📊</div>
               </div>
           </div>
@@ -140,14 +150,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <AdminStatCard label="Membros HABA" value={stats.barcarena.active} emoji="👥" color="from-indigo-50/50 to-indigo-100/50" />
                   <AdminStatCard label="Setores HABA" value={stats.barcarena.sectors} emoji="🏢" color="from-slate-50 to-slate-100" />
               </div>
-              {/* BARRA DE PROGRESSO HABA */}
+              {/* BARRA DE PROGRESSO HABA COM HEADCOUNT V42 */}
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="flex justify-between items-end mb-4 relative z-10">
                       <div>
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Adesão Ministerial HABA</p>
-                          <p className="text-[9px] font-bold text-indigo-600/60 uppercase">Meta Institucional: 80%</p>
+                          {/* HEADCOUNT STATS BARCARENA */}
+                          <div className="flex items-center gap-2 mt-1.5 bg-indigo-50/50 w-fit px-3 py-1 rounded-full border border-indigo-100">
+                              <Users size={12} className="text-indigo-600" />
+                              <p className="text-[11px] font-black text-indigo-900">{stats.barcarena.active} <span className="text-indigo-300 font-bold">/ {stats.barcarena.rh}</span></p>
+                          </div>
                       </div>
-                      <p className="text-3xl font-black text-indigo-600">{stats.barcarena.coverage.toFixed(1)}%</p>
+                      <div className="text-right">
+                          <p className="text-3xl font-black text-indigo-600">{stats.barcarena.coverage.toFixed(1)}%</p>
+                          <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Meta: 80%</p>
+                      </div>
                   </div>
                   <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex items-center px-1 relative z-10">
                       <div 
@@ -155,6 +172,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         style={{ width: `${Math.min(stats.barcarena.coverage, 100)}%` }}
                       ></div>
                   </div>
+                  <p className="mt-3 text-[9px] font-bold text-slate-400 uppercase tracking-[0.15em] relative z-10 italic">
+                      HABA: {stats.barcarena.rh} colaboradores ativos na base oficial
+                  </p>
                   <div className="absolute -right-4 -bottom-4 text-6xl opacity-[0.03] group-hover:scale-110 transition-transform">📊</div>
               </div>
           </div>
