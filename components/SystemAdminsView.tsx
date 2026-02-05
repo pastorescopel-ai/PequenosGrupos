@@ -6,6 +6,7 @@ import { db, auth } from '../lib/firebase';
 import { Leader, Collaborator, PG, Sector } from '../types';
 import UserRegistrationModal from './UserRegistrationModal';
 import ConfirmModal from './ConfirmModal';
+import LeaderDetailModal from './LeaderDetailModal';
 
 interface SystemAdminsViewProps {
   leaders: Leader[];
@@ -17,14 +18,15 @@ interface SystemAdminsViewProps {
 
 const SystemAdminsView: React.FC<SystemAdminsViewProps> = ({ leaders, allCollaborators, pgs, sectors, onUpdateUser }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState<Leader | null>(null);
   const [adminToDelete, setAdminToDelete] = useState<{id: string, name: string} | null>(null);
   const [adminToReset, setAdminToReset] = useState<{email: string, name: string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filtra apenas administradores
   const admins = leaders.filter(l => l.active && l.role === 'ADMIN' && (
-      l.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      l.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      (l.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (l.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   ));
 
   const handleCreateAdmin = async (data: any) => {
@@ -60,6 +62,17 @@ const SystemAdminsView: React.FC<SystemAdminsViewProps> = ({ leaders, allCollabo
     }
   };
 
+  const handleUpdateAdmin = async (data: Partial<Leader>) => {
+      if (!editingAdmin) return;
+      try {
+          await updateDoc(doc(db, 'leaders', editingAdmin.id), data);
+          setEditingAdmin(null);
+      } catch (e) {
+          console.error(e);
+          alert("Erro ao atualizar administrador.");
+      }
+  };
+
   const handleRevokeAdmin = async () => {
       if (!adminToDelete) return;
       // Em vez de deletar, apenas remove o papel de admin e inativa (ou muda para LIDER se preferir, mas inativar é mais seguro)
@@ -78,6 +91,17 @@ const SystemAdminsView: React.FC<SystemAdminsViewProps> = ({ leaders, allCollabo
           setAdminToReset(null);
           alert(`E-mail de redefinição enviado para ${adminToReset.name}`);
       } catch(e: any) {
+          alert("Erro: " + e.message);
+      }
+  };
+
+  // Wrapper para envio de convite (usado no modal de detalhes)
+  const handleSendInviteWrapper = async (email: string) => {
+      if (!auth) return;
+      try {
+          await auth.sendPasswordResetEmail(email);
+          alert(`Convite enviado para ${email}`);
+      } catch (e: any) {
           alert("Erro: " + e.message);
       }
   };
@@ -113,14 +137,30 @@ const SystemAdminsView: React.FC<SystemAdminsViewProps> = ({ leaders, allCollabo
 
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
              {admins.map(admin => (
-                 <div key={admin.id} className="p-6 rounded-[2rem] border border-slate-100 bg-white hover:border-orange-200 hover:shadow-lg transition-all group relative">
+                 <div 
+                    key={admin.id} 
+                    onClick={() => setEditingAdmin(admin)}
+                    className="p-6 rounded-[2rem] border border-slate-100 bg-white hover:border-orange-200 hover:shadow-lg transition-all group relative cursor-pointer"
+                 >
                      <div className="flex items-start justify-between mb-4">
                          <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-black text-lg">
                              {admin.full_name.charAt(0)}
                          </div>
                          <div className="flex gap-1">
-                             <button onClick={() => setAdminToReset({email: admin.email!, name: admin.full_name})} className="p-2 text-slate-300 hover:text-blue-600 transition-colors" title="Redefinir Senha"><Key size={18}/></button>
-                             <button onClick={() => setAdminToDelete({id: admin.id, name: admin.full_name})} className="p-2 text-slate-300 hover:text-red-600 transition-colors" title="Revogar Acesso"><Trash2 size={18}/></button>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); setAdminToReset({email: admin.email!, name: admin.full_name}); }} 
+                                className="p-2 text-slate-300 hover:text-blue-600 transition-colors" 
+                                title="Redefinir Senha"
+                             >
+                                <Key size={18}/>
+                             </button>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); setAdminToDelete({id: admin.id, name: admin.full_name}); }} 
+                                className="p-2 text-slate-300 hover:text-red-600 transition-colors" 
+                                title="Revogar Acesso"
+                             >
+                                <Trash2 size={18}/>
+                             </button>
                          </div>
                      </div>
                      <div>
@@ -146,6 +186,25 @@ const SystemAdminsView: React.FC<SystemAdminsViewProps> = ({ leaders, allCollabo
             leaders={leaders}
             initialUnit="Belém"
             forcedRole="ADMIN"
+        />
+      )}
+
+      {editingAdmin && (
+        <LeaderDetailModal 
+            leader={editingAdmin}
+            pgs={pgs}
+            leaders={leaders}
+            photos={[]} // Admins geralmente não tem fotos de PG para gerenciar aqui, passamos vazio
+            sectors={sectors}
+            onClose={() => setEditingAdmin(null)}
+            onUpdate={handleUpdateAdmin}
+            onInactivate={async (reason) => {
+                await updateDoc(doc(db, 'leaders', editingAdmin.id), { active: false });
+                setEditingAdmin(null);
+            }}
+            onResetPassword={(pass) => {
+                if(editingAdmin.email) handleSendInviteWrapper(editingAdmin.email);
+            }}
         />
       )}
 

@@ -1,6 +1,7 @@
 
 export const MOTIVOS_ADMISSAO = [
-  'Faz parte do setor',
+  'Setor vizinho',
+  'Setor próximo',
   'Nova contratação',
   'Transferência de setor',
   'Retorno de licença',

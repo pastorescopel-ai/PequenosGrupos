@@ -1,409 +1,205 @@
 
 import React, { useState } from 'react';
-import { 
-  Plus, 
-  Users,
-  ShieldAlert,
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  BellRing,
-  Check,
-  X,
-  MessageSquare,
-  AlertTriangle,
-  Send,
-  Key
-} from 'lucide-react';
-import { addDoc, collection, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
-import { Leader, ChangeRequest, InactivationReason, PGMeetingPhoto, PG, Collaborator, Sector, HospitalUnit } from '../types';
-import LeaderDashboard from './LeaderDashboard';
-import UserRegistrationModal from './UserRegistrationModal';
-import LeaderDetailModal from './LeaderDetailModal';
-import ConfirmModal from './ConfirmModal';
+import { Search, UserPlus, Filter, RefreshCw, Plus } from 'lucide-react';
+import { Leader, PG, ChangeRequest, Collaborator, Sector, PGMeetingPhoto } from '../types';
 import LeaderCard from './LeaderCard';
+import AddLeaderModal from './AddLeaderModal';
+import LeaderDetailModal from './LeaderDetailModal';
+import { doc, updateDoc, setDoc, deleteDoc, collection } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
+import ConfirmModal from './ConfirmModal';
 
 interface AdminManagementProps {
+  pgs: PG[];
   leaders: Leader[];
   setLeaders: React.Dispatch<React.SetStateAction<Leader[]>>;
   memberRequests: ChangeRequest[];
-  onRequestAction: (id: string, status: 'approved' | 'rejected') => void;
+  onRequestAction: (id: string, status: 'approved' | 'rejected') => Promise<void>;
   photos: PGMeetingPhoto[];
-  pgs: PG[];
-  sectors: Sector[];
   allCollaborators: Collaborator[];
+  sectors: Sector[];
 }
 
-const AdminManagement: React.FC<AdminManagementProps> = ({ leaders, setLeaders, memberRequests, onRequestAction, photos, pgs, sectors, allCollaborators }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [managingLeader, setManagingLeader] = useState<Leader | null>(null);
-  const [selectedLeader, setSelectedLeader] = useState<Leader | null>(null);
-  const [leaderToDelete, setLeaderToDelete] = useState<{id: string, name: string} | null>(null);
-  const [leaderToResetPass, setLeaderToResetPass] = useState<{email: string, name: string} | null>(null);
+const AdminManagement: React.FC<AdminManagementProps> = ({ 
+  pgs, leaders, setLeaders, memberRequests, onRequestAction, photos, allCollaborators, sectors 
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
   const [showInactive, setShowInactive] = useState(false);
-  const [processingReqId, setProcessingReqId] = useState<string | null>(null);
-  const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>('Belém');
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingLeader, setEditingLeader] = useState<Leader | null>(null);
+  const [leaderToDelete, setLeaderToDelete] = useState<Leader | null>(null);
 
-  const [rejectionTarget, setRejectionTarget] = useState<ChangeRequest | null>(null);
-  const [rejectionReasonText, setRejectionReasonText] = useState("");
-
-  const displayedLeaders = leaders.filter(l => (showInactive ? true : l.active) && l.hospital === selectedUnit);
-  const pendingRequests = memberRequests.filter(req => req.status === 'pending');
+  const displayedLeaders = leaders.filter(l => 
+    l.role !== 'ADMIN' && // Exclude admins from general leader list
+    ((l.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+     (l.employee_id || '').includes(searchTerm))
+  );
 
   const sortedLeaders = [...displayedLeaders].sort((a, b) => {
+    const nameA = a.full_name || '';
+    const nameB = b.full_name || '';
+    
     if (showInactive) {
-       if (a.active === b.active) return a.full_name.localeCompare(b.full_name);
+       if (a.active === b.active) return nameA.localeCompare(nameB);
        return a.active ? -1 : 1;
     }
-    return a.full_name.localeCompare(b.full_name);
+    return nameA.localeCompare(nameB);
   });
 
-  const handleApproveRequest = async (req: ChangeRequest) => {
-    setProcessingReqId(req.id);
-    try {
-        await updateDoc(doc(db, "change_requests", req.id), { status: 'approved' });
-        if (req.type === 'add') {
-            const targetLeader = leaders.find(l => l.id === req.leader_id);
-            let pgName = targetLeader?.pg_name || `PG do Líder ${req.leader_name}`; 
-
-            await setDoc(doc(db, "members", req.collaborator_id), {
-                id: req.collaborator_id,
-                employee_id: req.collaborator_id,
-                full_name: req.collaborator_name,
-                sector_name: req.collaborator_sector,
-                pg_name: pgName,
-                active: true,
-                join_date: new Date().toLocaleDateString()
-            });
-        }
-    } catch (e) {
-        console.error("Erro ao aprovar:", e);
-    } finally {
-        setProcessingReqId(null);
-    }
-  };
-
-  const handleOpenRejectModal = (req: ChangeRequest) => {
-      setRejectionTarget(req);
-      setRejectionReasonText("");
-  };
-
-  const handleConfirmReject = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!rejectionTarget) return;
-      setProcessingReqId(rejectionTarget.id);
+  const handleAddLeader = async (data: any) => {
       try {
-          await updateDoc(doc(db, "change_requests", rejectionTarget.id), { 
-              status: 'rejected',
-              admin_notes: rejectionReasonText 
-          });
-          setRejectionTarget(null);
+          const newLeaderRef = doc(collection(db, 'leaders'));
+          // Simple ID generation for external or using employee_id for internal
+          const docId = data.isExternal ? newLeaderRef.id : data.matricula; 
+          const finalRef = doc(db, 'leaders', docId);
+
+          const newLeader = {
+              id: docId,
+              full_name: data.name,
+              employee_id: data.isExternal ? 'EXT-' + Date.now() : data.matricula,
+              email: data.email.toLowerCase(),
+              whatsapp: data.whatsapp,
+              hospital: data.hospital,
+              pg_name: data.pgId ? pgs.find(p => p.id === data.pgId)?.name : '',
+              sector_name: data.sector,
+              role: 'LIDER',
+              status: 'approved',
+              active: true,
+              needs_password_change: true,
+              is_admin: false
+          };
+          await setDoc(finalRef, newLeader);
+          alert("Líder cadastrado com sucesso!");
+          setIsAdding(false);
       } catch (e) {
           console.error(e);
-      } finally {
-          setProcessingReqId(null);
+          alert("Erro ao cadastrar.");
       }
-  };
-
-  const handleCreateUser = async (data: any) => {
-    try {
-      const emailFormatted = data.email.toLowerCase().trim();
-      
-      // Validação de duplicidade básica
-      const exists = leaders.some(l => l.email === emailFormatted || (l.employee_id === data.matricula && !data.isExternal));
-      if(exists) {
-          alert("Usuário já cadastrado (E-mail ou Matrícula em uso).");
-          return;
-      }
-
-      const selectedPG = pgs.find(p => p.id === data.pgId);
-      const pgName = selectedPG ? selectedPG.name : '';
-
-      const newL: Omit<Leader, 'id'> = {
-        full_name: data.name,
-        employee_id: data.isExternal ? 'EXTERNO' : data.matricula,
-        hospital: data.hospital,
-        is_admin: data.role === 'ADMIN',
-        role: data.role,
-        status: 'approved',
-        sector_name: data.sector,
-        pg_name: pgName,
-        email: emailFormatted,
-        whatsapp: data.whatsapp,
-        active: true,
-        needs_password_change: true 
-      };
-      
-      await addDoc(collection(db, "leaders"), newL);
-      alert("Usuário cadastrado com sucesso!");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao criar usuário.");
-    }
   };
 
   const handleUpdateLeader = async (data: Partial<Leader>) => {
-    if (!selectedLeader) return;
-    try {
-      await updateDoc(doc(db, "leaders", selectedLeader.id), data);
-    } catch (error) {
-      console.error(error);
-    }
-    setSelectedLeader(null);
+      if (!editingLeader) return;
+      try {
+          await updateDoc(doc(db, 'leaders', editingLeader.id), data);
+          setEditingLeader(null);
+      } catch (e) {
+          console.error(e);
+          alert("Erro ao atualizar.");
+      }
   };
 
-  const handleInactivateLeader = async (reason: InactivationReason) => {
-    if (!selectedLeader) return;
-    try {
-        await updateDoc(doc(db, "leaders", selectedLeader.id), { active: false });
-    } catch (e) {
-        console.error(e);
-    }
-    setSelectedLeader(null);
+  const handleInactivate = async (reason: string) => {
+      if (!leaderToDelete) return;
+      try {
+          await updateDoc(doc(db, 'leaders', leaderToDelete.id), { active: false });
+          setLeaderToDelete(null);
+      } catch (e) {
+          console.error(e);
+      }
   };
 
-  const confirmDelete = async () => {
-    if (!leaderToDelete) return;
-    try {
-      await deleteDoc(doc(db, "leaders", leaderToDelete.id));
-      setLeaderToDelete(null);
-    } catch (error) {
-      console.error(error);
-    }
+  const handleSendInvite = async (e: React.MouseEvent, email: string) => {
+      e.stopPropagation();
+      if (!auth) return;
+      try {
+          await auth.sendPasswordResetEmail(email);
+          alert(`Convite enviado para ${email}`);
+      } catch (e: any) {
+          alert("Erro: " + e.message);
+      }
   };
-
-  const handleResetPassword = (tempPass: string) => {
-    if (!selectedLeader || !selectedLeader.email) return;
-    setLeaderToResetPass({ email: selectedLeader.email, name: selectedLeader.full_name });
-  };
-
-  const confirmResetPassword = async () => {
-    if (!leaderToResetPass || !auth) return;
-    try {
-      await auth.sendPasswordResetEmail(leaderToResetPass.email);
-      setLeaderToResetPass(null);
-      alert(`Link de redefinição enviado com sucesso para ${leaderToResetPass.email}`);
-    } catch (error: any) {
-      alert("Erro: " + error.message);
-    }
-  };
-
-  const handleSendInvite = (e: React.MouseEvent, leader: Leader) => {
-    e.stopPropagation();
-    const origin = window.location.origin;
-    const inviteLink = `${origin}?mode=register&email=${encodeURIComponent(leader.email || '')}`;
-    const message = `Olá *${leader.full_name.split(' ')[0]}*, \n\nVocê foi cadastrado como ${leader.role === 'ADMIN' ? 'Administrador' : 'Líder de PG'} no sistema do Hospital Adventista.\n\nPara acessar, clique no link abaixo e crie sua senha pessoal:\n\n🔗 ${inviteLink}\n\nSeu e-mail de acesso é: *${leader.email}*`;
-
-    if (leader.whatsapp) {
-      const waLink = `https://wa.me/55${leader.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
-      window.open(waLink, '_blank');
-    }
-  };
-
-  if (managingLeader) {
-    return (
-      <div className="space-y-6">
-        <button onClick={() => setManagingLeader(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-blue-600 mb-4 transition-colors">
-          <ArrowLeft size={16} /> Voltar ao Cadastro
-        </button>
-        <div className="bg-blue-950 p-8 rounded-[2.5rem] border border-blue-900 flex items-center justify-between mb-8 shadow-2xl">
-          <div className="text-white">
-            <h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
-               <ShieldAlert className="text-blue-400"/> Gerindo PG de: {managingLeader.full_name}
-            </h2>
-            <p className="text-blue-300 text-sm font-medium">Sessão administrativa ativada.</p>
-          </div>
-          <button onClick={() => setManagingLeader(null)} className="bg-blue-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">Encerrar Gestão</button>
-        </div>
-        <LeaderDashboard 
-            user={managingLeader} 
-            memberRequests={memberRequests} 
-            photos={photos} 
-            onUpdateSchedule={() => {}} 
-            members={[] as Collaborator[]} 
-            onUpdateUser={async (data) => {
-                if (managingLeader) {
-                    try {
-                        await updateDoc(doc(db, "leaders", managingLeader.id), data);
-                        setManagingLeader(prev => prev ? { ...prev, ...data } : null);
-                    } catch (e) {
-                        console.error(e);
-                    }
-                }
-            }}
-        />
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-12 animate-in fade-in duration-500 relative">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Gestão de Usuários</h2>
-          <p className="text-slate-500 font-medium">Controle de líderes e administradores do sistema.</p>
-        </div>
-        <div className="flex gap-4">
-            <div className="flex bg-slate-100 p-1.5 rounded-2xl shadow-inner">
-                <button
-                    onClick={() => setSelectedUnit('Belém')}
-                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    selectedUnit === 'Belém' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                >
-                    HAB (Belém)
-                </button>
-                <button
-                    onClick={() => setSelectedUnit('Barcarena')}
-                    className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    selectedUnit === 'Barcarena' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                >
-                    HABA (Barcarena)
-                </button>
+    <div className="space-y-10 animate-in fade-in duration-500">
+        <header className="flex justify-between items-center">
+            <div>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tight">Gestão de Líderes</h2>
+                <p className="text-slate-500 font-medium mt-1">Controle de cadastro e acesso dos líderes de PG.</p>
             </div>
             <button 
-                onClick={() => setShowAddModal(true)} 
+                onClick={() => setIsAdding(true)}
                 className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center gap-3 hover:bg-blue-700 transition-all shadow-xl active:scale-95"
             >
-                <Plus size={20} /> Adicionar Usuário
+                <Plus size={20}/> Novo Líder
             </button>
+        </header>
+
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+            <div className="flex flex-col md:flex-row gap-4 mb-8 bg-slate-50 p-4 rounded-2xl">
+                <div className="flex-1 relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por nome ou matrícula..." 
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="bg-transparent w-full pl-12 py-2 font-bold text-slate-700 outline-none placeholder:text-slate-400"
+                    />
+                </div>
+                <div className="w-px bg-slate-200 hidden md:block"></div>
+                <button 
+                    onClick={() => setShowInactive(!showInactive)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${showInactive ? 'bg-orange-100 text-orange-700' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <Filter size={16}/> {showInactive ? 'Ocultar Inativos' : 'Ver Inativos'}
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sortedLeaders.filter(l => showInactive ? true : l.active).map(leader => (
+                    <LeaderCard 
+                        key={leader.id} 
+                        leader={leader} 
+                        onSelect={() => setEditingLeader(leader)}
+                        onDelete={(e) => { e.stopPropagation(); setLeaderToDelete(leader); }}
+                        onSendInvite={(e) => handleSendInvite(e, leader.email || '')}
+                    />
+                ))}
+            </div>
         </div>
-      </header>
 
-      {pendingRequests.length > 0 && (
-          <div className="bg-orange-50 border border-orange-100 rounded-[2.5rem] p-8 shadow-sm space-y-6 animate-in slide-in-from-top-4">
-              <div className="flex items-center gap-3 text-orange-800">
-                  <div className="p-3 bg-white rounded-xl shadow-sm"><BellRing size={20}/></div>
-                  <div>
-                      <h3 className="text-lg font-black tracking-tight">Solicitações Pendentes</h3>
-                      <p className="text-xs font-medium opacity-80">Membros de outros setores aguardando aprovação.</p>
-                  </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {pendingRequests.map(req => (
-                      <div key={req.id} className="bg-white p-5 rounded-3xl border border-orange-100 flex flex-col gap-3 shadow-sm hover:shadow-md transition-all">
-                          <div className="flex justify-between items-start">
-                              <div>
-                                  <p className="font-black text-slate-800 text-sm">{req.collaborator_name}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{req.collaborator_sector}</p>
-                              </div>
-                              <div className="bg-blue-50 px-3 py-1 rounded-lg">
-                                  <p className="text-[9px] font-black text-blue-600 uppercase">Para: {req.leader_name}</p>
-                              </div>
-                          </div>
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex gap-2 items-start">
-                              <MessageSquare size={14} className="text-slate-400 mt-0.5 shrink-0"/>
-                              <p className="text-xs text-slate-600 italic leading-relaxed">"{req.reason_category}"</p>
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                              <button onClick={() => handleOpenRejectModal(req)} disabled={processingReqId === req.id} className="flex-1 py-3 border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2">
-                                  <X size={14}/> Recusar
-                              </button>
-                              <button onClick={() => handleApproveRequest(req)} disabled={processingReqId === req.id} className="flex-1 py-3 bg-green-600 text-white hover:bg-green-700 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-100">
-                                  {processingReqId === req.id ? <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div> : <><Check size={14}/> Aprovar</>}
-                              </button>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-          </div>
-      )}
-      
-      <div className="flex justify-end">
-         <button 
-           onClick={() => setShowInactive(!showInactive)}
-           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all ${showInactive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-         >
-            {showInactive ? <EyeOff size={14}/> : <Eye size={14}/>}
-            {showInactive ? 'Ocultar Inativos' : 'Ver Histórico / Inativos'}
-         </button>
-      </div>
-
-      {displayedLeaders.length === 0 ? (
-          <div className="text-center py-20 opacity-50">
-              <p className="text-lg font-bold text-slate-400">Nenhum usuário encontrado para {selectedUnit}.</p>
-          </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sortedLeaders.map(l => (
-            <LeaderCard 
-                key={l.id}
-                leader={l}
-                onSelect={() => setSelectedLeader(l)}
-                onDelete={(e) => { e.stopPropagation(); setLeaderToDelete({ id: l.id, name: l.full_name }); }}
-                onSendInvite={(e) => handleSendInvite(e, l)}
+        {isAdding && (
+            <AddLeaderModal 
+                onClose={() => setIsAdding(false)} 
+                onSave={handleAddLeader} 
+                allCollaborators={allCollaborators} 
+                pgs={pgs} 
+                leaders={leaders}
+                sectors={sectors}
             />
-            ))}
-        </div>
-      )}
+        )}
 
-      {rejectionTarget && (
-          <div className="fixed inset-0 bg-red-950/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-200">
-                  <div className="flex justify-between items-start mb-6">
-                      <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center"><AlertTriangle size={24} /></div>
-                          <div>
-                              <h3 className="text-xl font-black text-slate-800 tracking-tight">Recusar Solicitação</h3>
-                              <p className="text-xs text-slate-500 font-medium mt-0.5">Membro: {rejectionTarget.collaborator_name}</p>
-                          </div>
-                      </div>
-                      <button onClick={() => setRejectionTarget(null)} className="p-2 text-slate-300 hover:text-slate-600"><X size={24}/></button>
-                  </div>
-                  <form onSubmit={handleConfirmReject} className="space-y-4">
-                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Motivo Original do Líder</p><p className="text-sm font-medium text-slate-700 italic">"{rejectionTarget.reason_category}"</p></div>
-                      <div className="space-y-2"><label className="text-[10px] font-black text-red-600 uppercase tracking-widest px-1">Motivo da Recusa (Obrigatório)</label><textarea required value={rejectionReasonText} onChange={e => setRejectionReasonText(e.target.value)} placeholder="Explique por que esta solicitação está sendo negada..." className="w-full h-32 p-4 bg-white border-2 border-red-100 rounded-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-300 resize-none transition-all placeholder:font-medium placeholder:text-slate-400" /></div>
-                      <div className="flex gap-3 pt-2"><button type="button" onClick={() => setRejectionTarget(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all">Cancelar</button><button type="submit" disabled={processingReqId === rejectionTarget.id} className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-700 shadow-xl shadow-red-100 transition-all flex items-center justify-center gap-2">{processingReqId === rejectionTarget.id ? 'Processando...' : <><Send size={14}/> Confirmar Recusa</>}</button></div>
-                  </form>
-              </div>
-          </div>
-      )}
+        {editingLeader && (
+            <LeaderDetailModal 
+                leader={editingLeader}
+                pgs={pgs}
+                leaders={leaders}
+                photos={photos}
+                sectors={sectors}
+                onClose={() => setEditingLeader(null)}
+                onUpdate={handleUpdateLeader}
+                onInactivate={async (reason) => {
+                    await updateDoc(doc(db, 'leaders', editingLeader.id), { active: false });
+                    setEditingLeader(null);
+                }}
+                onResetPassword={(pass) => {
+                    if(editingLeader.email) handleSendInvite({stopPropagation:()=>{}} as any, editingLeader.email);
+                }}
+            />
+        )}
 
-      {selectedLeader && (
-        <LeaderDetailModal 
-            leader={selectedLeader} 
-            pgs={pgs} 
-            sectors={sectors} 
-            leaders={leaders} 
-            photos={photos} 
-            onClose={() => setSelectedLeader(null)} 
-            onUpdate={handleUpdateLeader} 
-            onInactivate={handleInactivateLeader} 
-            onResetPassword={handleResetPassword} 
-        />
-      )}
-
-      {showAddModal && (
-        <UserRegistrationModal 
-            onClose={() => setShowAddModal(false)} 
-            onSave={handleCreateUser} 
-            allCollaborators={allCollaborators} 
-            pgs={pgs} 
-            sectors={sectors} 
-            leaders={leaders}
-            initialUnit={selectedUnit}
-        />
-      )}
-
-      {leaderToDelete && (
-        <ConfirmModal title="Excluir Cadastro?" description={<>Você está prestes a remover o usuário <b>{leaderToDelete.name}</b>.</>} onConfirm={confirmDelete} onCancel={() => setLeaderToDelete(null)} confirmText="Excluir Definitivamente" />
-      )}
-
-      {leaderToResetPass && (
-        <ConfirmModal 
-          title="Redefinir Senha?" 
-          description={<>Enviar e-mail oficial de redefinição de senha para <b>{leaderToResetPass.name}</b> ({leaderToResetPass.email})?</>} 
-          onConfirm={confirmResetPassword} 
-          onCancel={() => setLeaderToResetPass(null)} 
-          confirmText="Enviar E-mail" 
-          variant="success"
-          icon={<Key size={36}/>}
-        />
-      )}
+        {leaderToDelete && (
+            <ConfirmModal 
+                title="Inativar Líder?" 
+                description={<>O líder <b>{leaderToDelete.full_name}</b> perderá acesso ao sistema, mas o histórico será mantido.</>} 
+                onConfirm={() => handleInactivate('Outros')} 
+                onCancel={() => setLeaderToDelete(null)} 
+                confirmText="Inativar Acesso"
+                variant="danger"
+            />
+        )}
     </div>
   );
-};
+}
 
 export default AdminManagement;

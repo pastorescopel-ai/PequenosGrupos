@@ -12,8 +12,8 @@ const SectorManager: React.FC = () => {
   const [newSector, setNewSector] = useState({ code: '', name: '' });
 
   const filtered = sectors.filter(s => 
-    s.name.toLowerCase().includes(search.toLowerCase()) || 
-    s.code.toLowerCase().includes(search.toLowerCase())
+    (s.name || '').toLowerCase().includes(search.toLowerCase()) || 
+    (s.code || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const toggleActive = (id: string) => {

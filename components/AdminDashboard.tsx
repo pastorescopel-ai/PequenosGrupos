@@ -1,19 +1,10 @@
 
 import React, { useMemo } from 'react';
 import { 
-  TrendingUp, 
-  Users, 
-  Hospital, 
-  Target, 
-  BarChart3, 
-  Activity,
-  ChevronRight,
-  BellRing,
-  UserPlus,
-  Database,
-  Building2
+  Users, Activity, Building2, Percent, ShieldCheck, Calendar, Camera, LayoutGrid, Clock
 } from 'lucide-react';
-import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest } from '../types';
+import { MeetingSchedule, Leader, Collaborator, Sector, ChangeRequest, PGMeetingPhoto } from '../types';
+import NotificationBanner from './NotificationBanner';
 
 interface AdminDashboardProps {
   user: Leader;
@@ -24,192 +15,185 @@ interface AdminDashboardProps {
   members: Collaborator[];
   sectors: Sector[];
   memberRequests?: ChangeRequest[];
-  onNavigateToMembers?: () => void;
+  onNavigateToMembers?: (pgName?: string) => void;
   allCollaborators?: Collaborator[];
+  photos?: PGMeetingPhoto[];
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  user,
-  onUpdateUser,
-  meetingSchedules, 
-  onNavigateToScale, 
-  leaders, 
-  members, 
-  sectors,
-  memberRequests = [],
-  onNavigateToMembers,
-  allCollaborators = []
+  user, onUpdateUser, meetingSchedules, onNavigateToScale, leaders, members, sectors, memberRequests = [], onNavigateToMembers, allCollaborators = [], photos = []
 }) => {
   const pendingRequests = meetingSchedules.filter(s => s.request_chaplain && s.chaplain_status === 'pending');
   const pendingMembers = memberRequests.filter(r => r.status === 'pending');
   const activeLeaders = leaders.filter(l => l.active);
-  const activeMembers = members.filter(m => m.active !== false);
 
-  const totalActiveParticipants = useMemo(() => {
-    const combined = [
-      ...activeMembers.map(m => m.employee_id),
-      ...activeLeaders.map(l => l.employee_id)
-    ];
-    return new Set(combined).size;
-  }, [activeMembers, activeLeaders]);
+  const stats = useMemo(() => {
+    const calculateForUnit = (unit: 'Belém' | 'Barcarena') => {
+        const rhBase = allCollaborators.filter(c => c.active && (c.hospital === unit || (!c.hospital && unit === 'Belém')));
+        const unitSectors = sectors.filter(s => s.active && (s.hospital === unit || !s.hospital));
+        
+        const participants = new Set([
+            ...members.filter(m => m.active !== false && (m.hospital === unit || (!m.hospital && unit === 'Belém'))).map(m => m.employee_id),
+            ...leaders.filter(l => l.active && l.hospital === unit).map(l => l.employee_id)
+        ]);
 
-  const sectorsCount = sectors.length;
-  const sectorsBelemCount = sectors.filter(s => s.hospital === 'Belém' || !s.hospital).length;
-  const sectorsBarcarenaCount = sectors.filter(s => s.hospital === 'Barcarena').length;
+        const coverage = rhBase.length > 0 ? (participants.size / rhBase.length) * 100 : 0;
 
-  const sectorsWithPGs = sectors.filter(s => 
-    members.some(m => m.sector_name === s.name && m.active !== false) ||
-    leaders.some(l => l.sector_name === s.name && l.active)
-  ).length;
+        return {
+            rh: rhBase.length,
+            sectors: unitSectors.length,
+            active: participants.size,
+            coverage
+        };
+    };
 
-  const coveragePercent = sectorsCount > 0 ? (sectorsWithPGs / sectorsCount) * 100 : 0;
-
-  // Cálculo das Bases RH (Denominador)
-  const rhBelemCount = allCollaborators.filter(c => c.active && (c.hospital === 'Belém' || !c.hospital)).length;
-  const rhBarcarenaCount = allCollaborators.filter(c => c.active && c.hospital === 'Barcarena').length;
-
-  // Cálculo de Ativos por Unidade (Numerador)
-  const activeBelem = activeMembers.filter(m => m.hospital === 'Belém').length + activeLeaders.filter(l => l.hospital === 'Belém').length;
-  const activeBarcarena = activeMembers.filter(m => m.hospital === 'Barcarena').length + activeLeaders.filter(l => l.hospital === 'Barcarena').length;
-
-  const unitsData = [
-    { 
-      name: 'Belém', 
-      count: activeBelem,
-      rhCount: rhBelemCount,
-      color: 'bg-blue-600' 
-    },
-    { 
-      name: 'Barcarena', 
-      count: activeBarcarena,
-      rhCount: rhBarcarenaCount,
-      color: 'bg-indigo-500' 
-    },
-  ];
+    return {
+        belem: calculateForUnit('Belém'),
+        barcarena: calculateForUnit('Barcarena'),
+        global: {
+            leaders: activeLeaders.length,
+            evidence: photos.length,
+            pending: pendingRequests.length + pendingMembers.length
+        }
+    };
+  }, [allCollaborators, members, leaders, sectors, photos, pendingRequests, pendingMembers]);
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <header className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Visão Geral</h2>
-          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Monitoramento Master</p>
-        </div>
-      </header>
+    <div className="space-y-8 animate-in fade-in duration-700 pb-16 text-left">
+      
+      <NotificationBanner user={user} onUpdateUser={onUpdateUser} />
 
+      {/* HEADER DE BOAS VINDAS */}
+      <div className="clay-card p-10 relative overflow-hidden bg-white/40">
+          <div className="absolute -right-6 -top-6 text-[120px] opacity-10 filter drop-shadow-xl select-none rotate-12">🛡️</div>
+          <div className="relative z-10">
+              <h2 className="text-3xl font-black text-slate-800 tracking-tight mb-2">Olá, Diretor</h2>
+              <p className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mb-8">Administração Ministerial Unificada</p>
+              
+              <div className="flex flex-wrap gap-4">
+                  {pendingRequests.length > 0 && (
+                      <button onClick={onNavigateToScale} className="bg-blue-600 text-white px-6 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest flex items-center gap-3 btn-3d-press shadow-blue-100">
+                          <Calendar size={18}/> {pendingRequests.length} Escala Pastoral
+                      </button>
+                  )}
+                  {pendingMembers.length > 0 && (
+                      <button onClick={() => onNavigateToMembers?.()} className="bg-orange-50 text-white px-6 py-4 rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest flex items-center gap-3 btn-3d-press shadow-orange-100">
+                          <Users size={18}/> {pendingMembers.length} Pedidos de Vínculo
+                      </button>
+                  )}
+              </div>
+          </div>
+      </div>
+
+      {/* CAMADA 1: RESUMO EXECUTIVO (GLOBAL) */}
       <div className="space-y-4">
-          {pendingRequests.length > 0 && (
-            <div className="bg-blue-600 rounded-[2rem] p-6 text-white shadow-xl shadow-blue-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center gap-5">
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center animate-bounce">
-                  <BellRing size={28} />
-                </div>
-                <div>
-                  <h4 className="font-black text-lg">Pedidos de Capelania Aguardando</h4>
-                  <p className="text-blue-100 text-sm font-medium">Você tem {pendingRequests.length} {pendingRequests.length === 1 ? 'solicitação pendente' : 'solicitações pendentes'}.</p>
-                </div>
-              </div>
-              <button 
-                onClick={onNavigateToScale}
-                className="bg-white text-blue-600 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-blue-50 transition-all shadow-lg active:scale-95"
-              >
-                Acessar Escala Pastoral <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
-
-          {pendingMembers.length > 0 && (
-            <div className="bg-orange-500 rounded-[2rem] p-6 text-white shadow-xl shadow-orange-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4 duration-500">
-              <div className="flex items-center gap-5">
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center animate-pulse">
-                  <UserPlus size={28} />
-                </div>
-                <div>
-                  <h4 className="font-black text-lg">Membros de Outros Setores</h4>
-                  <p className="text-orange-100 text-sm font-medium">Há {pendingMembers.length} {pendingMembers.length === 1 ? 'colaborador aguardando' : 'colaboradores aguardando'} aprovação de vínculo.</p>
-                </div>
-              </div>
-              <button 
-                onClick={onNavigateToMembers}
-                className="bg-white text-orange-600 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-3 hover:bg-orange-50 transition-all shadow-lg active:scale-95"
-              >
-                Analisar Pendências <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
-      </div>
-
-      {/* Grid de Estatísticas Master */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 md:gap-6">
-        <StatCard label="Total Integrantes" value={totalActiveParticipants.toString()} icon={<Users size={24}/>} color="text-blue-600" />
-        <StatCard label="Líderes Ativos" value={activeLeaders.length.toString()} icon={<Activity size={24}/>} color="text-emerald-500" />
-        <StatCard label="Adesão Setores" value={`${coveragePercent.toFixed(0)}%`} icon={<Target size={24}/>} color="text-amber-500" />
-        
-        <StatCard label="Setores HAB" value={sectorsBelemCount.toString()} icon={<Hospital size={24}/>} color="text-blue-500" />
-        <StatCard label="Setores HABA" value={sectorsBarcarenaCount.toString()} icon={<Building2 size={24}/>} color="text-indigo-500" />
-        
-        <StatCard label="Base RH HAB" value={rhBelemCount.toString()} icon={<Database size={24}/>} color="text-slate-400" />
-        <StatCard label="Base RH HABA" value={rhBarcarenaCount.toString()} icon={<Database size={24}/>} color="text-slate-400" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <div className="flex justify-between items-center mb-8">
-            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest">
-              <BarChart3 className="text-slate-400" size={20}/> Cobertura por Unidade
-            </h3>
+          <div className="flex items-center gap-3 px-2">
+              <LayoutGrid size={16} className="text-slate-400" />
+              <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Visão Executiva Global</h3>
           </div>
-          <div className="space-y-10 py-4">
-            {unitsData.map((unit) => {
-              // Cálculo de Cobertura: Ativos / Base RH
-              const percent = unit.rhCount > 0 ? (unit.count / unit.rhCount) * 100 : 0;
-              return (
-                <div key={unit.name} className="space-y-3">
-                  <div className="flex justify-between items-end">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{unit.name}</p>
-                      <p className="text-xl font-black text-slate-800">
-                        {unit.count} <span className="text-sm text-slate-400 font-bold">/ {unit.rhCount} Colaboradores</span>
-                      </p>
-                    </div>
-                    <p className={`text-2xl font-black ${percent >= 20 ? 'text-green-600' : 'text-slate-800'}`}>{percent.toFixed(1)}%</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <ExecutiveCard label="Líderes Ativos" value={stats.global.leaders} emoji="👔" color="bg-blue-600" />
+              <ExecutiveCard label="Evidências Enviadas" value={stats.global.evidence} emoji="📸" color="bg-purple-600" />
+              <ExecutiveCard label="Pendências Totais" value={stats.global.pending} emoji="⏳" color="bg-orange-600" />
+          </div>
+      </div>
+
+      {/* CAMADA 2: MÉTRICAS ESTRITAS (UNITÁRIAS) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          
+          {/* PAINEL BELÉM (HAB) */}
+          <div className="space-y-4">
+              <div className="flex items-center gap-3 px-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                  <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">Unidade Belém (HAB)</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <AdminStatCard label="Membros HAB" value={stats.belem.active} emoji="👥" color="from-blue-50/50 to-blue-100/50" />
+                  <AdminStatCard label="Setores HAB" value={stats.belem.sectors} emoji="🏢" color="from-slate-50 to-slate-100" />
+              </div>
+              {/* BARRA DE PROGRESSO HAB */}
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                  <div className="flex justify-between items-end mb-4 relative z-10">
+                      <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Adesão Ministerial HAB</p>
+                          <p className="text-[9px] font-bold text-blue-600/60 uppercase">Meta Institucional: 80%</p>
+                      </div>
+                      <p className="text-3xl font-black text-blue-600">{stats.belem.coverage.toFixed(1)}%</p>
                   </div>
-                  <div className="w-full h-3 bg-slate-50 rounded-full overflow-hidden">
-                    <div className={`h-full ${unit.color} rounded-full transition-all duration-1000`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
+                  <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex items-center px-1 relative z-10">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-1000 ${stats.belem.coverage >= 80 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-blue-600'}`} 
+                        style={{ width: `${Math.min(stats.belem.coverage, 100)}%` }}
+                      ></div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        
-        <div className="bg-blue-950 p-10 rounded-[2.5rem] text-white shadow-xl flex flex-col border border-blue-900 relative overflow-hidden">
-          <TrendingUp className="absolute -right-10 -bottom-10 text-white/5" size={200} />
-          <h3 className="text-xs font-black mb-8 flex items-center gap-2 relative z-10 uppercase tracking-widest text-blue-400">
-            <TrendingUp size={16}/> Top Setores
-          </h3>
-          <div className="flex-1 space-y-4 relative z-10">
-            {sectors.filter(s => leaders.some(l => l.sector_name === s.name && l.active)).slice(0, 6).map(s => (
-              <div key={s.id} className="flex items-center justify-between group py-2 border-b border-white/5 last:border-0">
-                <div><p className="text-sm font-bold group-hover:text-blue-300 transition-colors truncate max-w-[150px]">{s.name}</p></div>
-                <span className={`text-[9px] font-black uppercase text-blue-500 bg-blue-900/50 px-2 py-1 rounded`}>{s.code}</span>
+                  <div className="absolute -right-4 -bottom-4 text-6xl opacity-[0.03] group-hover:scale-110 transition-transform">📊</div>
               </div>
-            ))}
-            {sectors.length === 0 && <p className="text-blue-300/50 italic text-sm">Nenhum setor cadastrado.</p>}
           </div>
-        </div>
+
+          {/* PAINEL BARCARENA (HABA) */}
+          <div className="space-y-4">
+              <div className="flex items-center gap-3 px-2">
+                  <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
+                  <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">Unidade Barcarena (HABA)</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                  <AdminStatCard label="Membros HABA" value={stats.barcarena.active} emoji="👥" color="from-indigo-50/50 to-indigo-100/50" />
+                  <AdminStatCard label="Setores HABA" value={stats.barcarena.sectors} emoji="🏢" color="from-slate-50 to-slate-100" />
+              </div>
+              {/* BARRA DE PROGRESSO HABA */}
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                  <div className="flex justify-between items-end mb-4 relative z-10">
+                      <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Adesão Ministerial HABA</p>
+                          <p className="text-[9px] font-bold text-indigo-600/60 uppercase">Meta Institucional: 80%</p>
+                      </div>
+                      <p className="text-3xl font-black text-indigo-600">{stats.barcarena.coverage.toFixed(1)}%</p>
+                  </div>
+                  <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden flex items-center px-1 relative z-10">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-1000 ${stats.barcarena.coverage >= 80 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-indigo-600'}`} 
+                        style={{ width: `${Math.min(stats.barcarena.coverage, 100)}%` }}
+                      ></div>
+                  </div>
+                  <div className="absolute -right-4 -bottom-4 text-6xl opacity-[0.03] group-hover:scale-110 transition-transform">📊</div>
+              </div>
+          </div>
+
       </div>
+
+      {/* FOOTER INFORMATIVO */}
+      <div className="bg-white/50 border border-slate-100 p-8 rounded-[3rem] flex flex-col items-center justify-center text-center gap-4">
+           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-slate-50"><span className="text-4xl">🌎</span></div>
+           <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight">Monitoramento Ministerial Híbrido</h3>
+           <p className="text-xs text-slate-400 font-medium max-w-lg leading-relaxed italic">
+             "O acompanhamento consolidado permite a visão do Reino, enquanto o detalhamento por unidade garante o cuidado individual em cada hospital."
+           </p>
+      </div>
+
     </div>
   );
 };
 
-const StatCard = ({ label, value, icon, color }: any) => (
-  <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all flex flex-col items-center justify-center gap-2">
-    <div className={`${color} mb-1`}>{icon}</div>
-    <div className="text-center">
-        <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.1em] mb-1 leading-tight">{label}</p>
-        <p className="text-2xl font-black text-slate-800 leading-none">{value}</p>
+const ExecutiveCard = ({ label, value, emoji, color }: any) => (
+    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex items-center gap-5 group hover:border-blue-200 transition-all">
+        <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-black/5 group-hover:scale-110 transition-transform`}>
+            {emoji}
+        </div>
+        <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
+            <p className="text-2xl font-black text-slate-800 leading-none">{value}</p>
+        </div>
     </div>
-  </div>
+);
+
+const AdminStatCard = ({ label, value, emoji, color }: any) => (
+    <div className={`bg-gradient-to-br ${color} p-6 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 border border-white shadow-xl shadow-black/5 active:scale-95 transition-all h-full`}>
+        <div className="text-3xl filter drop-shadow-md mb-1">{emoji}</div>
+        <div className="text-center">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-0.5">{label}</p>
+            <p className="text-3xl font-black text-slate-800 leading-none">{value}</p>
+        </div>
+    </div>
 );
 
 export default AdminDashboard;

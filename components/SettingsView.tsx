@@ -4,30 +4,35 @@ import {
   Save, 
   CheckCircle,
   Loader2,
-  Palette
+  Palette,
+  ShieldAlert,
+  Sparkles
 } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../lib/firebase';
-import { ReportSettings, UnitLayout } from '../types';
+import { doc, setDoc, writeBatch, getDocs, collection } from 'firebase/firestore';
+import { db } from '../lib/firebase'; 
+import { ReportSettings, UnitLayout, Sector, Collaborator } from '../types';
 import VisualPageBuilder from './VisualPageBuilder';
 import ConfirmModal from './ConfirmModal';
 
 interface SettingsViewProps {
   settings: ReportSettings;
   onUpdate: (s: ReportSettings) => void;
+  sectors?: Sector[];
+  allCollaborators?: Collaborator[];
 }
 
+// Ajuste Fino: Assinatura Y aumentado para 224 (era 218) para ficar mais perto do nome (Y=236)
 const DEFAULT_LAYOUT: UnitLayout = {
     header: { x: 0, y: 0, w: 210, h: 45 },
     header_bg_color: '#ffffff',
     footer: { x: 0, y: 260, w: 210, h: 37 },
-    signature: { x: 55, y: 218, w: 100, h: 12 }, 
+    signature: { x: 55, y: 224, w: 100, h: 12 }, 
     director_name_pos: { x: 55, y: 236, w: 100, h: 10 },
     director_title_pos: { x: 55, y: 243, w: 100, h: 8 },
     content_y: 50 
 };
 
-const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate, sectors = [], allCollaborators = [] }) => {
   const [localSettings, setLocalSettings] = useState<ReportSettings>({
       ...settings,
       layout: settings.layout || {
@@ -39,6 +44,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
   const [isSaved, setIsSaved] = useState(false);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [fileToRemove, setFileToRemove] = useState<keyof ReportSettings | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -60,6 +67,113 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
     signature_url: useRef<HTMLInputElement>(null)
   };
 
+  const executeDeepCleanup = async () => {
+    setShowCleanupConfirm(false);
+    setIsProcessing(true);
+
+    try {
+        // Recarregar setores direto do banco para garantir que não estamos usando cache
+        const allSectorsSnap = await getDocs(collection(db, "sectors"));
+        const currentSectors = allSectorsSnap.docs.map(d => d.data() as Sector);
+
+        let batch = writeBatch(db);
+        let batchCount = 0;
+        let fixedCollabs = 0;
+        let deletedSectors = 0;
+
+        // 1. CORRIGIR NOMES NOS COLABORADORES
+        // Varre todos os colaboradores e tenta encontrar um setor "Oficial" para eles
+        for (const collab of allCollaborators) {
+            // Tenta achar o setor oficial pelo ID numérico (ex: "22") que corresponde ao ID antigo (ex: "22_HAB...")
+            // Ou pelo Code direto
+            const officialSector = currentSectors.find(s => 
+                s.code === collab.sector_id || 
+                s.id === collab.sector_id ||
+                // Fallback: Tenta extrair o código numérico do ID antigo do colaborador
+                (collab.sector_id && s.code === collab.sector_id.split('_')[0])
+            );
+            
+            // Se achou um oficial e o nome está diferente, atualiza
+            if (officialSector && collab.sector_name !== officialSector.name) {
+                const collabRef = doc(db, "collaborators", collab.id);
+                batch.update(collabRef, { 
+                    sector_name: officialSector.name,
+                    sector_id: officialSector.code // Força o ID para o novo padrão também
+                });
+                fixedCollabs++;
+                batchCount++;
+            }
+
+            if (batchCount >= 400) {
+                await batch.commit();
+                batch = writeBatch(db);
+                batchCount = 0;
+            }
+        }
+
+        // 2. DELETAR SETORES "SUJOS"
+        // Padrão antigo: NUMERO + (HAB ou HABA) + NOME (com underscores ou hifens)
+        // Padrão novo: Apenas o CÓDIGO (ex: "22") ou um UUID limpo
+        const dirtyRegex = /^(\d+)[-_ ]*(HAB|HABA)[-_ ]+/i;
+
+        for (const secDoc of allSectorsSnap.docs) {
+            const secId = secDoc.id;
+            
+            // Se o ID bate com o padrão antigo (Ex: "22_HAB_CAPELANIA")
+            if (dirtyRegex.test(secId)) {
+                batch.delete(secDoc.ref);
+                deletedSectors++;
+                batchCount++;
+                console.log(`Marcado para deleção: ${secId}`);
+            }
+
+            if (batchCount >= 400) {
+                await batch.commit();
+                batch = writeBatch(db);
+                batchCount = 0;
+            }
+        }
+
+        if (batchCount > 0) await batch.commit();
+
+        alert(`Limpeza Concluída!\n\n- Colaboradores Corrigidos: ${fixedCollabs}\n- Setores Antigos Removidos: ${deletedSectors}\n\nO banco de dados agora deve mostrar apenas os setores unificados.`);
+
+    } catch (error) {
+        console.error("Erro na limpeza:", error);
+        alert("Erro técnico durante a higienização. Verifique o console.");
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  // Função mágica para resolver o CORS: Converte imagem para Base64 comprimido
+  const processImageToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                // Redimensionar para evitar documentos gigantes no Firestore (Max 800px largura)
+                const scale = Math.min(1, 800 / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // Comprime para JPEG 70% para economizar espaço
+                const format = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+                resolve(canvas.toDataURL(format, 0.7));
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: keyof ReportSettings, pathPrefix: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -72,12 +186,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
 
     setUploadingField(field as string);
     try {
-      const storageRef = ref(storage, `settings/${pathPrefix}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      setLocalSettings(prev => ({ ...prev, [field]: downloadURL }));
+      const base64String = await processImageToBase64(file);
+      setLocalSettings(prev => ({ ...prev, [field]: base64String }));
     } catch (error) {
-      console.error("Erro upload:", error);
+      console.error("Erro ao processar imagem:", error);
+      alert("Erro ao processar a imagem. Tente uma imagem menor.");
     } finally {
       setUploadingField(null);
     }
@@ -90,11 +203,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdate(localSettings);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    try {
+        await setDoc(doc(db, "settings", "global"), localSettings);
+        onUpdate(localSettings);
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 3000);
+    } catch (error) {
+        console.error("Erro ao salvar:", error);
+        alert("Erro ao salvar configurações.");
+    }
   };
 
   const currentLayout = activeUnitTab === 'Belém' ? localSettings.layout!.belem : localSettings.layout!.barcarena;
@@ -119,15 +238,48 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
     <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500 pb-32">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Arquitetura de Relatórios</h2>
-          <p className="text-slate-500 font-medium">Configure a identidade visual oficial.</p>
+          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Configurações Gerais</h2>
+          <p className="text-slate-500 font-medium">Parâmetros do sistema e relatórios.</p>
         </div>
         {isSaved && (
           <div className="flex items-center gap-2 bg-green-100 text-green-700 px-6 py-3 rounded-2xl text-xs font-black animate-bounce shadow-sm">
-            <CheckCircle size={18} /> CONFIGURAÇÕES SALVAS!
+            <CheckCircle size={18} /> SALVO!
           </div>
         )}
       </header>
+
+      {/* ZONA DE MANUTENÇÃO - LIMPEZA DE DUPLICIDADES */}
+      <div className="bg-orange-50 p-8 rounded-[3rem] border border-orange-100 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
+         <div className="flex items-center gap-6">
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-orange-600 border border-orange-100 shadow-sm">
+                <ShieldAlert size={24} />
+            </div>
+            <div>
+                <h4 className="text-lg font-black text-slate-800 tracking-tight">Manutenção de Banco de Dados</h4>
+                <p className="text-xs text-orange-800 font-medium mt-1 leading-relaxed max-w-md">
+                    Detecta setores duplicados (ex: "22_HAB_CAPELANIA"), move funcionários para o oficial ("CAPELANIA") e limpa o lixo.
+                </p>
+            </div>
+         </div>
+         <button 
+            onClick={() => setShowCleanupConfirm(true)}
+            disabled={isProcessing}
+            className="px-8 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-orange-700 shadow-xl shadow-orange-100 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
+         >
+            {isProcessing ? <Loader2 className="animate-spin" size={16}/> : <Sparkles size={16} />} 
+            {isProcessing ? 'Processando...' : 'Forçar Unificação'}
+         </button>
+      </div>
+
+      <div className="bg-slate-100 h-px w-full my-4"></div>
+
+      <div className="flex items-center gap-2 mb-2">
+         <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">Arquitetura de Relatórios</h3>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-amber-800 text-xs font-medium mb-6">
+         <strong>Atenção:</strong> Se estiver tendo problemas com a geração de PDF, reenvie as imagens (Logo, Assinatura) abaixo.
+      </div>
 
       <form onSubmit={handleSave} className="space-y-10">
         <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -278,6 +430,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdate }) => {
           onCancel={() => setFileToRemove(null)}
           confirmText="Confirmar Remoção"
           variant="warning"
+        />
+      )}
+
+      {showCleanupConfirm && (
+        <ConfirmModal
+            title="Manutenção de Banco de Dados"
+            description={<>Isso irá varrer <b>todos os colaboradores</b> e atualizar os nomes dos setores para o padrão oficial, além de <b>DELETAR</b> setores duplicados antigos (Ex: '22_HAB_UTI').<br/><br/>Esta ação é irreversível.</>}
+            onConfirm={executeDeepCleanup}
+            onCancel={() => setShowCleanupConfirm(false)}
+            confirmText="Iniciar Reparação"
+            variant="warning"
+            icon={<ShieldAlert size={40} />}
         />
       )}
     </div>

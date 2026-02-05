@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { BellRing, X, ChevronRight } from 'lucide-react';
+import { X, ChevronRight } from 'lucide-react';
 import { requestNotificationPermission } from '../lib/notifications';
 import { Leader } from '../types';
 
@@ -13,8 +13,6 @@ const NotificationBanner: React.FC<NotificationBannerProps> = ({ user, onUpdateU
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Só mostra se as notificações não estiverem garantidas nem negadas (estado inicial)
-    // E se o usuário ainda não ativou no perfil
     if ("Notification" in window) {
       if (Notification.permission === 'default' && !user.browser_notifications_enabled) {
         setIsVisible(true);
@@ -28,7 +26,7 @@ const NotificationBanner: React.FC<NotificationBannerProps> = ({ user, onUpdateU
       await onUpdateUser({ browser_notifications_enabled: true });
       setIsVisible(false);
     } else {
-      alert("A permissão foi negada. Para ativar, clique no cadeado ao lado da URL do navegador e autorize as notificações.");
+      alert("A permissão foi negada. Verifique as configurações do navegador.");
       setIsVisible(false);
     }
   };
@@ -36,16 +34,16 @@ const NotificationBanner: React.FC<NotificationBannerProps> = ({ user, onUpdateU
   if (!isVisible) return null;
 
   return (
-    <div className="mb-8 animate-in slide-in-from-top-4 duration-500">
+    <div className="mb-8 animate-in slide-in-from-top-4 duration-500 text-left">
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-[2.5rem] p-6 md:p-8 text-white shadow-2xl shadow-blue-200 relative overflow-hidden group">
         <div className="absolute -right-10 -top-10 opacity-10 group-hover:rotate-12 transition-transform duration-700">
-          <BellRing size={180} />
+           <span className="text-[180px] select-none">🔔</span>
         </div>
         
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-6 text-center md:text-left">
             <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center animate-bounce">
-              <BellRing size={32} className="text-white" />
+              <span className="text-3xl">🔔</span>
             </div>
             <div>
               <h4 className="text-xl font-black tracking-tight">Ativar Alertas do Sistema?</h4>

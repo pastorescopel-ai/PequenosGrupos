@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, LayoutDashboard, Upload, Settings, UserCog, Hospital, UsersRound, Camera, CalendarCheck, 
@@ -15,10 +14,13 @@ import ProfileView from './ProfileView';
 import AdminManagement from './AdminManagement';
 import SettingsView from './SettingsView';
 import AdminDashboard from './AdminDashboard';
-import MemberManagement from './MemberManagement';
-import PGPhotosView from './components/PGPhotosView';
-import ChaplainScale from './components/ChaplainScale';
+import AdminMemberView from './MemberManagement/AdminMemberView';
+import LeaderMemberView from './MemberManagement/LeaderMemberView';
+import PGPhotosView from './PGPhotosView';
+import ChaplainScale from './ChaplainScale';
 import SystemAdminsView from './SystemAdminsView';
+
+import { useMemberActions } from '../hooks/useMemberLogic';
 
 interface PGModuleProps {
   authenticatedUser: Leader; 
@@ -26,9 +28,8 @@ interface PGModuleProps {
 
 const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [targetPGId, setTargetPGId] = useState<string | null>(null);
   
-  // O estado agora é alimentado apenas via props ou Firebase, 
-  // eliminando o risco de circularidade no stringify do localStorage.
   const [allCollaborators, setAllCollaborators] = useState<Collaborator[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [pgs, setPgs] = useState<PG[]>([]);
@@ -49,15 +50,14 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
     signature_url: ''
   });
 
-  const safeDbAction = async (action: () => Promise<void>) => {
+  const { handleMemberRequestAction, createAddRequest } = useMemberActions(authenticatedUser, leaders);
+
+  const safeDbAction = async (action: () => Promise<any>) => {
       if(!db) return;
       try { await action(); } catch(e) { console.error(e); }
   };
 
   const handleUpdateUser = async (data: Partial<Leader>) => {
-      // In a real scenario, this would likely update context or trigger a refresh
-      // Since PGModule handles its own state for lists but not the authenticated user directly (passed as prop),
-      // we can stub this or update firestore.
       if (authenticatedUser && db) {
           try {
               await updateDoc(doc(db, "leaders", authenticatedUser.id), data);
@@ -80,7 +80,10 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
               members={members} 
               sectors={sectors} 
               memberRequests={memberRequests} 
-              onNavigateToMembers={() => setActiveTab('admin')}
+              onNavigateToMembers={(pgName) => {
+                  setTargetPGId(pgName || null);
+                  setActiveTab('members');
+              }}
               allCollaborators={allCollaborators}
             /> 
           : <LeaderDashboard 
@@ -94,63 +97,36 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
               onUpdateSchedule={(s) => setMeetingSchedules([...meetingSchedules, s as MeetingSchedule])} 
               members={members} 
             />;
-      case 'chaplain-scale':
-        return (authenticatedUser.role === 'ADMIN' || authenticatedUser.role === 'CAPELAO') ? <ChaplainScale meetingSchedules={meetingSchedules} chaplains={chaplains} onChaplainAction={(lid, act, aid) => {}} /> : null;
       case 'members':
-        return <MemberManagement user={authenticatedUser} pgs={pgs} onAddRequest={async (r, targetPgName) => {
-             await safeDbAction(async () => {
-               await setDoc(doc(collection(db, "change_requests"), r.id), r);
-               if(r.type === 'add' && r.status === 'approved') {
-                 await setDoc(doc(db, "members", r.collaborator_id), {
-                    id: r.collaborator_id,
-                    employee_id: r.collaborator_id,
-                    full_name: r.collaborator_name,
-                    sector_name: r.collaborator_sector,
-                    pg_name: targetPgName || authenticatedUser.pg_name,
-                    active: true,
-                    join_date: new Date().toLocaleDateString()
-                 });
-               }
-             });
-          }} 
-          memberRequests={memberRequests} members={members} setMembers={setMembers} allCollaborators={allCollaborators} />;
+        return authenticatedUser.role === 'ADMIN'
+          ? <AdminMemberView 
+              user={authenticatedUser} memberRequests={memberRequests} members={members} 
+              allCollaborators={allCollaborators} pgs={pgs} leaders={leaders} sectors={sectors}
+              onAddRequest={(r, pg) => safeDbAction(() => createAddRequest(r, pg))}
+              onRequestAction={(id, status, req) => safeDbAction(() => handleMemberRequestAction(id, status, req))}
+              initialPGId={targetPGId}
+              onClearPGId={() => setTargetPGId(null)}
+            />
+          : <LeaderMemberView 
+              user={authenticatedUser} members={members} allCollaborators={allCollaborators} 
+              pgs={pgs} leaders={leaders} sectors={sectors}
+              onAddRequest={(r, pg) => safeDbAction(() => createAddRequest(r, pg))}
+              memberRequests={memberRequests}
+            />;
       case 'reports':
-        return <ReportCoverage 
-          isAdmin={authenticatedUser.role === 'ADMIN'} 
-          user={authenticatedUser} 
-          settings={reportSettings} 
-          photos={pgPhotos} 
-          sectors={sectors} 
-          members={members} 
-          allCollaborators={allCollaborators}
-          leaders={leaders}
-        />;
+        return <ReportCoverage isAdmin={authenticatedUser.role === 'ADMIN'} user={authenticatedUser} settings={reportSettings} sectors={sectors} members={members} allCollaborators={allCollaborators} leaders={leaders} photos={pgPhotos} pgs={pgs} />;
       case 'meetings':
-          return <PGPhotosView 
-            user={authenticatedUser} 
-            photos={pgPhotos} 
-            onAddPhoto={async (d) => {
-              const newPhoto = {
-                id: Date.now().toString(),
-                url: d.photo,
-                description: d.description,
-                uploaded_at: new Date().toISOString(),
-                week_number: 1,
-                leader_id: authenticatedUser.id
-              };
-              setPgPhotos([newPhoto, ...pgPhotos]);
-            }} 
-          />;
+        return <PGPhotosView user={authenticatedUser} photos={pgPhotos} onAddPhoto={async (d) => {}} />;
       case 'admin':
-        return authenticatedUser.role === 'ADMIN' ? <AdminManagement pgs={pgs} sectors={sectors} leaders={leaders} setLeaders={setLeaders} memberRequests={memberRequests} onRequestAction={(id, status) => {}} photos={pgPhotos} allCollaborators={allCollaborators} /> : null;
+        return authenticatedUser.role === 'ADMIN' ? <AdminManagement pgs={pgs} leaders={leaders} setLeaders={setLeaders} memberRequests={memberRequests} onRequestAction={(id, s) => {}} allCollaborators={allCollaborators} photos={pgPhotos} sectors={sectors} /> : null;
       case 'sys-admins':
-        return authenticatedUser.role === 'ADMIN' ? <SystemAdminsView leaders={leaders} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} onUpdateUser={async (data) => {}} /> : null;
-      case 'import':
-        return authenticatedUser.role === 'ADMIN' ? <ImportCollaborators allCollaborators={allCollaborators} setAllCollaborators={setAllCollaborators} adminId={authenticatedUser.id} chaplains={chaplains} setChaplains={setChaplains} sectors={sectors} setSectors={setSectors} pgs={pgs} setPgs={setPgs} /> : null;
+        return <SystemAdminsView leaders={leaders} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} onUpdateUser={handleUpdateUser} />;
       case 'settings':
-          return authenticatedUser.role === 'ADMIN' ? <SettingsView settings={reportSettings} onUpdate={setReportSettings} /> : null;
+        return <SettingsView settings={reportSettings} onUpdate={async (s) => {}} sectors={sectors} allCollaborators={allCollaborators} />;
+      case 'import':
+        return <ImportCollaborators adminId={authenticatedUser.id} chaplains={chaplains} setChaplains={setChaplains} sectors={sectors} setSectors={setSectors} allCollaborators={allCollaborators} setAllCollaborators={setAllCollaborators} pgs={pgs} setPgs={setPgs} />;
       case 'profile':
-          return <ProfileView user={authenticatedUser} onUpdate={(d) => {}} />;
+        return <ProfileView user={authenticatedUser} onUpdate={handleUpdateUser} />;
       default:
         return <div className="p-20 text-center font-black text-slate-300">Selecione uma opção no menu lateral.</div>;
     }
@@ -162,19 +138,21 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
         <aside className="w-64 bg-white border-r border-slate-100 p-6 space-y-2">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 mb-4">Módulo PGs</p>
           <NavBtn icon={<LayoutDashboard size={18}/>} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          {(authenticatedUser.role === 'ADMIN' || authenticatedUser.role === 'CAPELAO') && (
-            <NavBtn icon={<CalendarCheck size={18}/>} label="Escala Pastoral" active={activeTab === 'chaplain-scale'} onClick={() => setActiveTab('chaplain-scale')} />
+          {authenticatedUser.role === 'ADMIN' && (
+            <NavBtn icon={<UserCog size={18}/>} label="Líderes" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />
           )}
           <NavBtn icon={<UsersRound size={18}/>} label="Membros" active={activeTab === 'members'} onClick={() => setActiveTab('members')} />
-          <NavBtn icon={<Camera size={18}/>} label="Fotos de PG" active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} />
-          <NavBtn icon={<FileText size={18}/>} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+          {(authenticatedUser.role === 'ADMIN' || authenticatedUser.role === 'CAPELAO') && (
+            <NavBtn icon={<CalendarCheck size={18}/>} label="Escala" active={activeTab === 'chaplain-scale'} onClick={() => setActiveTab('chaplain-scale')} />
+          )}
+          <NavBtn icon={<Camera size={18}/>} label="Fotos" active={activeTab === 'meetings'} onClick={() => setActiveTab('meetings')} />
           {authenticatedUser.role === 'ADMIN' && (
             <>
               <div className="h-px bg-slate-100 my-4"></div>
-              <NavBtn icon={<UserCog size={18}/>} label="Líderes" active={activeTab === 'admin'} onClick={() => setActiveTab('admin')} />
-              <NavBtn icon={<ShieldCheck size={18}/>} label="Administradores" active={activeTab === 'sys-admins'} onClick={() => setActiveTab('sys-admins')} />
+              <NavBtn icon={<FileText size={18}/>} label="Relatórios" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+              <NavBtn icon={<Settings size={18}/>} label="Ajustes" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
               <NavBtn icon={<Upload size={18}/>} label="Importação" active={activeTab === 'import'} onClick={() => setActiveTab('import')} />
-              <NavBtn icon={<Settings size={18}/>} label="Ajustes PDF" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
+              <NavBtn icon={<ShieldCheck size={18}/>} label="Admins" active={activeTab === 'sys-admins'} onClick={() => setActiveTab('sys-admins')} />
             </>
           )}
         </aside>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, LayoutDashboard, Upload, Settings, UserCog, Hospital, UsersRound, Camera, CalendarCheck, 
@@ -92,7 +93,10 @@ const PGModule: React.FC<PGModuleProps> = ({ authenticatedUser }) => {
       case 'chaplain-scale':
         return (authenticatedUser.role === 'ADMIN' || authenticatedUser.role === 'CAPELAO') ? <ChaplainScale meetingSchedules={meetingSchedules} chaplains={chaplains} onChaplainAction={(lid, act, aid) => {}} /> : null;
       case 'members':
-        return <MemberManagement user={authenticatedUser} pgs={pgs} onAddRequest={async (r, targetPgName) => {
+        return <MemberManagement user={authenticatedUser} pgs={pgs} 
+          // Added sectors prop to fix missing prop
+          sectors={sectors}
+          onAddRequest={async (r, targetPgName) => {
              await safeDbAction(async () => {
                await setDoc(doc(collection(db, "change_requests"), r.id), r);
                if(r.type === 'add' && r.status === 'approved') {

@@ -57,8 +57,8 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
       const lowerTerm = searchTerm.toLowerCase();
       const filtered = allCollaborators.filter(c => 
         c.active && 
-        (c.full_name.toLowerCase().includes(lowerTerm) || 
-         c.employee_id.includes(searchTerm))
+        ((c.full_name || '').toLowerCase().includes(lowerTerm) || 
+         (c.employee_id || '').includes(searchTerm))
       ).slice(0, 20); // Aumentado para 20 resultados
       setSearchResults(filtered);
       setShowResults(true);
@@ -74,7 +74,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         const lower = sectorSearch.toLowerCase();
         const filtered = sectors.filter(s => 
             (s.hospital === formData.hospital || !s.hospital) && // Filtra pela unidade
-            (s.name.toLowerCase().includes(lower) || s.code.toLowerCase().includes(lower))
+            ((s.name || '').toLowerCase().includes(lower) || (s.code || '').toLowerCase().includes(lower))
         ).slice(0, 10);
         setSectorResults(filtered);
         setShowSectorResults(true);

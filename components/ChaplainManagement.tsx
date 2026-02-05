@@ -28,8 +28,8 @@ const ChaplainManagement: React.FC<ChaplainManagementProps> = ({ chaplains, onAd
     setSearchTerm(term);
     if (term.length > 2) {
       const results = allCollaborators.filter(c =>
-        c.full_name.toLowerCase().includes(term.toLowerCase()) ||
-        c.employee_id.includes(term)
+        (c.full_name || '').toLowerCase().includes(term.toLowerCase()) ||
+        (c.employee_id || '').includes(term)
       ).filter(c => !chaplains.some(chap => chap.employee_id === c.employee_id));
       setSearchResults(results);
     } else {

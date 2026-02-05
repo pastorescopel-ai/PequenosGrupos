@@ -8,7 +8,7 @@ import { Leader } from '../types';
 interface MeetingRegistryModalProps {
   user: Leader;
   onClose: () => void;
-  onSave: (data: { photo: string, description: string }) => void;
+  onSave: (data: { photo: string, description: string, sector_name: string }) => void;
 }
 
 const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClose, onSave }) => {
@@ -44,12 +44,16 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
 
     setIsUploading(true);
     try {
-        // Upload para Firebase Storage
         const storageRef = ref(storage, `pg_photos/${user.id}/${Date.now()}_${photo.name}`);
         const snapshot = await uploadBytes(storageRef, photo);
         const downloadURL = await getDownloadURL(snapshot.ref);
 
-        onSave({ photo: downloadURL, description });
+        // LOCKED_REPORT_SHIELD_V31: Vinculando explicitamente o setor da foto
+        onSave({ 
+            photo: downloadURL, 
+            description, 
+            sector_name: user.sector_name || 'Geral' 
+        });
         onClose();
     } catch (error) {
         console.error("Erro no upload:", error);
@@ -65,12 +69,12 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
       
       <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[3.5rem] shadow-2xl p-10 overflow-y-auto animate-in zoom-in-95 duration-300 relative z-10 custom-scrollbar">
         
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex justify-between items-start mb-8 text-left">
           <div>
             <h3 className="text-3xl font-black text-slate-800 flex items-center gap-4">
               <Camera className="text-blue-600" size={32}/> Registro de Reunião
             </h3>
-            <p className="text-slate-500 font-medium mt-1">Evidência semanal para o Pequeno Grupo.</p>
+            <p className="text-slate-500 font-medium mt-1">Sua foto será vinculada ao setor: <b className="text-blue-600">{user.sector_name}</b></p>
           </div>
           <button 
             onClick={onClose} 
@@ -78,18 +82,6 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
           >
             <X size={24} className="group-hover:rotate-90 transition-transform"/>
           </button>
-        </div>
-
-        <div className="bg-orange-50 border border-orange-100 p-6 rounded-[2rem] flex gap-5 mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-orange-600 shrink-0">
-             <Info size={24}/>
-          </div>
-          <div>
-            <p className="text-sm font-black text-orange-900 leading-tight">Aviso do Projeto</p>
-            <p className="text-xs text-orange-800/80 mt-1 font-medium leading-relaxed">
-              Fotos de cultos diários ou plantões não serão validadas. Use este espaço <b>apenas</b> para a reunião semanal do PG.
-            </p>
-          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -101,12 +93,6 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
           >
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
             
-            {isUploading && !preview && (
-               <div className="absolute inset-0 bg-white/50 flex items-center justify-center z-10">
-                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-               </div>
-            )}
-
             {preview ? (
               <>
                 <img src={preview} className="w-full h-full object-cover" alt="Preview" />
@@ -122,12 +108,11 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
                   <ImageIcon size={40}/>
                 </div>
                 <p className="font-black text-slate-800 uppercase text-xs tracking-widest">Selecionar Foto</p>
-                <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-tighter">Sua imagem será salva na nuvem</p>
               </div>
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 text-left">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Descrição da Reunião</label>
             <textarea 
               required
@@ -143,24 +128,10 @@ const MeetingRegistryModal: React.FC<MeetingRegistryModalProps> = ({ user, onClo
             disabled={!photo || !description || isUploading}
             className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-2xl hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
           >
-            {isUploading ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Enviando para Nuvem...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={20}/> Finalizar Registro
-              </>
-            )}
+            {isUploading ? "Enviando..." : "Finalizar Registro"}
           </button>
         </form>
       </div>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-      `}</style>
     </div>
   );
 };

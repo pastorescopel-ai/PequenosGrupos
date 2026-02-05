@@ -19,7 +19,7 @@ import MainContent from './components/MainContent';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // 1. Hook de Autenticação
+  // Hook de Autenticação
   const { 
     initializing, 
     currentUser, 
@@ -33,15 +33,12 @@ const App: React.FC = () => {
     handlePasswordReset 
   } = useAuth();
 
-  // 2. Lógica de Permissão Automática (Primeiro Clique Global)
+  // Lógica de Permissão Automática
   const triggerAutoNotification = useCallback(async () => {
     if (!currentUser || !("Notification" in window)) return;
-    
-    // Se o navegador ainda não perguntou (estado 'default')
     if (Notification.permission === 'default') {
       const granted = await requestNotificationPermission();
       if (granted) {
-        // Atualiza no perfil se o usuário aceitar
         const q = query(collection(db, "leaders"), where("email", "==", currentUser.email));
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
@@ -51,7 +48,6 @@ const App: React.FC = () => {
           setCurrentUser(prev => prev ? { ...prev, browser_notifications_enabled: true } : null);
         }
       }
-      // Remove o ouvinte após a primeira tentativa
       window.removeEventListener('click', triggerAutoNotification);
       window.removeEventListener('touchstart', triggerAutoNotification);
     }
@@ -68,14 +64,13 @@ const App: React.FC = () => {
     };
   }, [currentUser, initializing, triggerAutoNotification]);
 
-  // Resetar para dashboard sempre que o usuário sair
   useEffect(() => {
     if (!currentUser) {
       setActiveTab('dashboard');
     }
   }, [currentUser]);
 
-  // 3. Hook de Dados
+  // Hook de Dados
   const {
     allCollaborators, setAllCollaborators,
     sectors, setSectors,
@@ -93,24 +88,20 @@ const App: React.FC = () => {
 
   const handleUpdateUser = async (updatedData: Partial<Leader>) => {
     if (!currentUser) return;
-    
     await safeDbAction(async () => {
        const q = query(collection(db, "leaders"), where("email", "==", currentUser.email));
        const snapshot = await getDocs(q);
-       
        if (!snapshot.empty) {
          const leaderDocRef = doc(db, "leaders", snapshot.docs[0].id);
          await updateDoc(leaderDocRef, updatedData);
-       } else if (currentUser.role === 'ADMIN') {
-         await setDoc(doc(db, "leaders", currentUser.id), {
-           ...currentUser,
-           ...updatedData,
-           active: true,
-           status: 'approved'
-         }, { merge: true });
        }
-       
        setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
+    });
+  };
+
+  const handleMarkAsSeen = async (requestId: string) => {
+    await safeDbAction(async () => {
+        await updateDoc(doc(db, "change_requests", requestId), { seen_by_leader: true });
     });
   };
 
@@ -126,7 +117,9 @@ const App: React.FC = () => {
                 assigned_chaplain_id: assignedId || null,
                 chaplain_response: response || null,
                 chaplain_assigned_name: assignedId ? chaplains.find(c => c.id === assignedId)?.name : null,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                seen_by_leader: false,
+                seen_by_admin: false
             });
         }
     });
@@ -147,7 +140,6 @@ const App: React.FC = () => {
         mode={authViewMode} 
         error={authError}
         onSubmit={async (e, email, pass) => {
-          // Gatilho de gesto do usuário no clique do login
           requestNotificationPermission();
           authViewMode === 'login' ? handleLogin(e, email, pass) : handleRegister(e, email, pass);
         }}
@@ -166,14 +158,12 @@ const App: React.FC = () => {
       handleLogout={handleLogout} 
       meetingSchedules={meetingSchedules}
       memberRequests={memberRequests}
-      sectors={sectors}
-      allCollaborators={allCollaborators}
+      onMarkRequestAsSeen={handleMarkAsSeen}
     >
       <MainContent 
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         currentUser={currentUser}
-        
         allCollaborators={allCollaborators}
         sectors={sectors}
         pgs={pgs}
@@ -184,7 +174,6 @@ const App: React.FC = () => {
         pgPhotos={pgPhotos}
         memberRequests={memberRequests}
         reportSettings={reportSettings}
-
         setAllCollaborators={setAllCollaborators}
         setSectors={setSectors}
         setPgs={setPgs}
@@ -192,7 +181,6 @@ const App: React.FC = () => {
         setMembers={setMembers}
         setChaplains={setChaplains}
         setPgPhotos={setPgPhotos}
-
         handleUpdateUser={handleUpdateUser}
         handleChaplainAction={handleChaplainAction}
         updateSchedule={updateSchedule}

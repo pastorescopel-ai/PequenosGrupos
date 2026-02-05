@@ -51,6 +51,7 @@ export interface Chaplain {
 }
 
 export interface MeetingSchedule {
+  id?: string;
   leader_id: string;
   leader_name?: string;
   leader_whatsapp?: string;
@@ -66,6 +67,8 @@ export interface MeetingSchedule {
   chaplain_status: ChaplainStatus;
   chaplain_response?: string;
   chaplain_assigned_name?: string;
+  seen_by_admin?: boolean;
+  seen_by_leader?: boolean;
 }
 
 export interface Leader {
@@ -106,6 +109,7 @@ export interface ChangeRequest {
   id: string;
   leader_id: string;
   leader_name?: string;
+  target_pg_name?: string;
   collaborator_id: string;
   collaborator_name?: string;
   collaborator_sector?: string;
@@ -114,6 +118,11 @@ export interface ChangeRequest {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   admin_notes?: string;
+  refusal_reason?: string; // NOVO: Campo para explicar recusa
+  processed_at?: string;
+  processed_by?: string;
+  seen_by_admin?: boolean;
+  seen_by_leader?: boolean;
 }
 
 export interface Collaborator {
@@ -135,6 +144,9 @@ export interface PGMeetingPhoto {
   uploaded_at: string;
   week_number: number;
   leader_id: string;
+  leader_name?: string;
+  hospital?: HospitalUnit;
+  pg_name?: string;
 }
 
 export interface CoverageStats {

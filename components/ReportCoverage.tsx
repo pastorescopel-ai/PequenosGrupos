@@ -1,15 +1,31 @@
 
-import React, { useState, useMemo } from 'react';
-import { Loader2, Calendar } from 'lucide-react';
-// @ts-ignore
-import saveAs from 'file-saver';
-// @ts-ignore
-import { jsPDF } from 'jspdf';
-// @ts-ignore
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, Printer, Loader2, Download, X, Users, Building2, Flame, Camera, Archive } from 'lucide-react';
+import { Sector, Collaborator, Leader, ReportSettings, PGMeetingPhoto, HospitalUnit, PG } from '../types';
+import ReportPrintTemplate from './ReportPrintTemplate';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+import JSZip from 'jszip';
+import saveAs from 'file-saver';
 
-import { Leader, ReportSettings, HospitalUnit, Sector, Collaborator, UnitLayout, PGMeetingPhoto } from '../types';
-import { GLOBAL_BRAND_LOGO, REPORT_SPECIFIC_LOGO } from '../assets_base64';
+interface InconsistentMember extends Collaborator {
+    reason: 'divergent_sector' | 'not_in_rh' | 'active_member';
+    original_sector_name?: string;
+}
+
+interface ReportItemData {
+    id: string;
+    code: string;
+    name: string;
+    denominator: number;
+    numerator: number;
+    external_count: number;
+    coverage_percent: number;
+    members_list: InconsistentMember[];
+    leader_name?: string;
+    type: 'sector' | 'pg';
+    selectedPhotos?: string[];
+}
 
 interface ReportCoverageProps {
   isAdmin: boolean;
@@ -19,213 +35,355 @@ interface ReportCoverageProps {
   members: Collaborator[];
   allCollaborators: Collaborator[];
   leaders: Leader[];
-  photos?: PGMeetingPhoto[];
+  photos: PGMeetingPhoto[];
+  pgs: PG[];
 }
 
-interface ResolvedAssets {
-  header: { data: string, ratio: number };
-  signature: { data: string, ratio: number } | null;
-  footer: string | null;
-}
+const ReportCoverage: React.FC<ReportCoverageProps> = ({
+  isAdmin, user, settings, sectors, members, allCollaborators, leaders, pgs, photos
+}) => {
+  const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>(user.hospital || 'Belém');
+  const [reportMode, setReportMode] = useState<'sector' | 'pg'>('sector');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState(0);
+  const [auditingItem, setAuditingItem] = useState<ReportItemData | null>(null);
+  const [configModalItem, setConfigModalItem] = useState<ReportItemData | null>(null);
+  const [includePhotos, setIncludePhotos] = useState(true);
+  const [photoLimit, setPhotoLimit] = useState(2);
 
-const ReportCoverage: React.FC<ReportCoverageProps> = ({ isAdmin, user, settings, sectors, members, allCollaborators, leaders = [] }) => {
-  const [selectedUnit, setSelectedUnit] = useState<HospitalUnit>(user.hospital);
-  const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [renderItems, setReportItemsToRender] = useState<any[]>([]);
-  
-  // Filtros de Período
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const normalize = (s?: string) => s ? s.trim().toUpperCase() : '';
 
-  const fetchAssetAsBase64 = async (url: string | undefined, fallback: string): Promise<{ data: string, ratio: number }> => {
-    if (!url) return { data: fallback, ratio: 2.5 };
+  // BUFFER BASE64 V29 (Mantido para garantir pixels no PDF)
+  const imageUrlToBase64 = async (url: string): Promise<string> => {
     try {
-      const response = await fetch(`${url}?t=${Date.now()}`, { mode: 'cors' });
+      const response = await fetch(url, { cache: 'no-cache' });
       const blob = await response.blob();
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64data = reader.result as string;
-          const img = new Image();
-          img.onload = () => resolve({ data: base64data, ratio: img.width / img.height });
-          img.src = base64data;
-        };
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
-    } catch (e) { return { data: fallback, ratio: 2.5 }; }
-  };
-
-  const reportItems = useMemo(() => {
-    const targetSectors = isAdmin 
-        ? sectors.filter(s => s.hospital === selectedUnit || !s.hospital)
-        : sectors.filter(s => s.hospital === user.hospital || !s.hospital);
-
-    const items = targetSectors.map(sector => {
-        const sectorMembers = members.filter(m => m.sector_name === sector.name && m.active !== false);
-        const sectorLeaders = leaders.filter(l => l.sector_name === sector.name && l.active);
-        const uniqueMatriculas = new Set([...sectorMembers.map(m => m.employee_id), ...sectorLeaders.map(l => l.employee_id)]);
-        const sectorRH = allCollaborators.filter(c => c.sector_name === sector.name && c.active);
-        const denominator = sectorRH.length || 1;
-        return { 
-          id: sector.id, 
-          code: sector.code, 
-          name: sector.name, 
-          denominator, 
-          numerator: uniqueMatriculas.size, 
-          coverage_percent: (uniqueMatriculas.size / denominator) * 100 
-        };
-    });
-    return items.sort((a, b) => a.name.localeCompare(b.name));
-  }, [sectors, members, allCollaborators, leaders, selectedUnit, isAdmin]);
-
-  const drawMasterFrame = (pdf: any, layout: UnitLayout, resolved: ResolvedAssets) => {
-    pdf.setFillColor(layout.header_bg_color || '#ffffff');
-    pdf.rect(layout.header.x, layout.header.y, layout.header.w, layout.header.h, 'F');
-    pdf.addImage(resolved.header.data, 'PNG', layout.header.x + 5, layout.header.y + 5, 40, 35);
-
-    // Texto de Período no PDF
-    if (startDate && endDate) {
-      pdf.setFontSize(7);
-      pdf.setTextColor(150, 150, 150);
-      const periodText = `PERÍODO DE REFERÊNCIA: ${new Date(startDate).toLocaleDateString()} A ${new Date(endDate).toLocaleDateString()}`;
-      pdf.text(periodText, 200, 42, { align: 'right' });
+    } catch (e) {
+      console.error("Erro base64:", url, e);
+      return url;
     }
-
-    if (resolved.footer) pdf.addImage(resolved.footer, 'PNG', layout.footer.x, layout.footer.y, layout.footer.w, layout.footer.h);
-    if (resolved.signature) pdf.addImage(resolved.signature.data, 'PNG', 105 - (resolved.signature.ratio * 6), layout.signature.y, resolved.signature.ratio * 12, 12);
-    
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(8);
-    pdf.text(settings.director_name.toUpperCase(), 105, layout.director_name_pos.y + 4, { align: 'center' });
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(6);
-    pdf.text(settings.director_title.toUpperCase(), 105, layout.director_title_pos.y + 3, { align: 'center' });
   };
 
-  const generatePDFBlob = async (itemsBatch: any[]): Promise<Blob> => {
-    setReportItemsToRender(itemsBatch);
-    const headerUrl = selectedUnit === 'Belém' ? settings.template_belem_url : settings.template_barcarena_url;
-    const footerUrl = selectedUnit === 'Belém' ? settings.footer_belem_url : settings.footer_barcarena_url;
-    const [resolvedHeader, resolvedSig] = await Promise.all([
-        fetchAssetAsBase64(headerUrl, REPORT_SPECIFIC_LOGO || GLOBAL_BRAND_LOGO),
-        settings.signature_url ? fetchAssetAsBase64(settings.signature_url, "") : Promise.resolve(null)
-    ]);
-    const resolvedFooter = footerUrl ? (await fetchAssetAsBase64(footerUrl, "")).data : null;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  const reportData = useMemo(() => {
+      const isBelem = selectedUnit === 'Belém';
+      
+      if (reportMode === 'sector') {
+          const rhBaseBySector = new Map<string, Collaborator[]>();
+          allCollaborators.filter(c => c.active).forEach(c => {
+              if (c.hospital === selectedUnit || (!c.hospital && isBelem)) {
+                 const name = normalize(c.sector_name);
+                 if (!rhBaseBySector.has(name)) rhBaseBySector.set(name, []);
+                 rhBaseBySector.get(name)?.push(c);
+              }
+          });
 
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const key = selectedUnit === 'Belém' ? 'belem' : 'barcarena';
-    const currentLayout = settings.layout?.[key] || { header: { x: 0, y: 0, w: 210, h: 45 }, footer: { x: 0, y: 260, w: 210, h: 37 }, signature: { x: 55, y: 220, w: 100, h: 12 }, director_name_pos: { x: 55, y: 238, w: 100, h: 10 }, director_title_pos: { x: 55, y: 245, w: 100, h: 8 }, content_y: 50 };
+          const participantsBySector = new Map<string, Map<string, Collaborator>>();
+          const addParticipant = (collab: any) => {
+              if (collab.hospital === selectedUnit || (!collab.hospital && isBelem)) {
+                  const secName = normalize(collab.sector_name);
+                  if (!participantsBySector.has(secName)) participantsBySector.set(secName, new Map());
+                  participantsBySector.get(secName)?.set(collab.employee_id, collab);
+              }
+          };
 
-    for (let i = 0; i < itemsBatch.length; i += 3) {
-        if (i > 0) pdf.addPage();
-        drawMasterFrame(pdf, currentLayout, { header: resolvedHeader, signature: resolvedSig, footer: resolvedFooter });
-        const pageItems = itemsBatch.slice(i, i + 3);
-        for (let j = 0; j < pageItems.length; j++) {
-            const item = pageItems[j];
-            const element = document.getElementById(`rep-card-${item.id}`);
-            if (element) {
-                const canvas = await html2canvas(element, { scale: 2 });
-                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, currentLayout.content_y + (j * 60), 190, 55);
-            }
+          members.filter(m => m.active !== false).forEach(addParticipant);
+          leaders.filter(l => l.active).forEach(l => {
+              addParticipant({ id: l.id, employee_id: l.employee_id, full_name: l.full_name, sector_name: l.sector_name, hospital: l.hospital });
+          });
+
+          // LOCKED_GLOBAL_REPORTS_V32: Garantindo que setores da unidade selecionada apareçam
+          const targetSectors = sectors.filter(s => s.active && (s.hospital === selectedUnit || (!s.hospital && isBelem)));
+          
+          return targetSectors.map(sector => {
+              const secName = normalize(sector.name);
+              const rhBase = rhBaseBySector.get(secName) || [];
+              const participantsMap = participantsBySector.get(secName);
+              const participants = participantsMap ? Array.from(participantsMap.values()) : [];
+              const rhIds = new Set(rhBase.map(c => c.employee_id));
+              const externalCount = participants.filter(p => p.employee_id.startsWith('EXT-')).length;
+
+              const inconsistent = participants.filter(p => !rhIds.has(p.employee_id) && !p.employee_id.startsWith('EXT-')).map(p => {
+                  const rhRecord = allCollaborators.find(rh => rh.employee_id === p.employee_id && rh.active);
+                  return { ...p, reason: rhRecord ? 'divergent_sector' : 'not_in_rh', original_sector_name: rhRecord?.sector_name } as InconsistentMember;
+              });
+
+              return {
+                  id: sector.id, code: sector.code, name: sector.name,
+                  denominator: rhBase.length,
+                  numerator: participants.length,
+                  external_count: externalCount,
+                  coverage_percent: rhBase.length > 0 ? (participants.length / rhBase.length) * 100 : 0,
+                  members_list: inconsistent,
+                  type: 'sector'
+              } as ReportItemData;
+          }).filter(item => 
+              searchTerm === '' || item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.code.toLowerCase().includes(searchTerm.toLowerCase())
+          ).sort((a, b) => a.name.localeCompare(b.name));
+      } else {
+          const targetPGs = pgs.filter(pg => pg.active && (pg.hospital === selectedUnit || (!pg.hospital && isBelem)));
+          return targetPGs.map(pg => {
+              const pgLeader = leaders.find(l => l.pg_name === pg.name && l.active && (l.hospital === selectedUnit || (!l.hospital && isBelem)));
+              const pgMembers = members.filter(m => m.pg_name === pg.name && m.active !== false && (m.hospital === selectedUnit || (!m.hospital && isBelem)));
+              const totalCount = (pgLeader ? 1 : 0) + pgMembers.length;
+              let sectorRHCount = 0;
+              if (pgLeader) {
+                  const leaderSector = normalize(pgLeader.sector_name);
+                  sectorRHCount = allCollaborators.filter(c => c.active && normalize(c.sector_name) === leaderSector && (c.hospital === selectedUnit || (!c.hospital && isBelem))).length;
+              }
+              return {
+                  id: pg.id, code: 'PG', name: pg.name,
+                  leader_name: pgLeader?.full_name || 'Sem Líder',
+                  denominator: sectorRHCount || totalCount,
+                  numerator: totalCount,
+                  external_count: pgMembers.filter(m => m.employee_id.startsWith('EXT-')).length,
+                  coverage_percent: sectorRHCount > 0 ? (totalCount / sectorRHCount) * 100 : 100,
+                  members_list: [], type: 'pg'
+              } as ReportItemData;
+          }).filter(item => 
+              searchTerm === '' || item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.leader_name && item.leader_name.toLowerCase().includes(searchTerm.toLowerCase()))
+          ).sort((a, b) => a.name.localeCompare(b.name));
+      }
+  }, [selectedUnit, reportMode, searchTerm, sectors, pgs, allCollaborators, members, leaders]);
+
+  const getAvailablePhotosForItem = (item: ReportItemData) => {
+    if (!photos) return [];
+    return photos
+      .filter(p => {
+        if (item.type === 'pg') return normalize(p.pg_name) === normalize(item.name);
+        const matchExplicitSector = p.sector_name && normalize(p.sector_name) === normalize(item.name);
+        const matchLeaderOfSector = leaders.some(l => l.id === p.leader_id && normalize(l.sector_name) === normalize(item.name));
+        return matchExplicitSector || matchLeaderOfSector;
+      })
+      .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime());
+  };
+
+  const generateSinglePDF = async (item: ReportItemData) => {
+    setIsGenerating(true);
+    try {
+        if (includePhotos) {
+            const available = getAvailablePhotosForItem(item);
+            const rawUrls = available.slice(0, photoLimit).map(p => p.url);
+            const base64Photos = await Promise.all(rawUrls.map(url => imageUrlToBase64(url)));
+            item.selectedPhotos = base64Photos;
         }
+
+        const element = document.getElementById(`print-template-${item.id}`);
+        if (!element) throw new Error("Template not found");
+        await new Promise(r => setTimeout(r, 1200));
+
+        const canvas = await html2canvas(element, { scale: 2.5, useCORS: true, backgroundColor: '#ffffff' });
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        pdf.addImage(canvas.toDataURL('image/png', 1.0), 'PNG', 0, 0, 210, 297);
+        window.open(pdf.output('bloburl'), '_blank');
+    } catch (e) {
+        alert("Erro ao gerar PDF.");
+    } finally {
+        setIsGenerating(false);
+        setConfigModalItem(null);
     }
-    return pdf.output('blob');
   };
 
-  const handleSingleExport = async (item: any) => {
-    setGeneratingId(item.id);
-    const blob = await generatePDFBlob([item]);
-    saveAs(blob, `RELATORIO_${item.name.replace(/\s+/g, '_')}.pdf`);
-    setGeneratingId(null);
+  const handleBatchZip = async () => {
+    if (reportData.length === 0) return;
+    setIsGenerating(true);
+    const zip = new JSZip();
+    try {
+        for (const item of reportData) {
+            if (includePhotos) {
+                const available = getAvailablePhotosForItem(item);
+                const rawUrls = available.slice(0, photoLimit).map(p => p.url);
+                item.selectedPhotos = await Promise.all(rawUrls.map(url => imageUrlToBase64(url)));
+            }
+
+            const element = document.getElementById(`print-template-${item.id}`);
+            if (!element) continue;
+            await new Promise(r => setTimeout(r, 300));
+            
+            const canvas = await html2canvas(element, { scale: 2.0, useCORS: true });
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
+            const pdfBlob = pdf.output('blob');
+            zip.file(`${item.name.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`, pdfBlob);
+        }
+        const content = await zip.generateAsync({ type: 'blob' });
+        saveAs(content, `Lote_Auditoria_${selectedUnit}_${reportMode}.zip`);
+    } catch (e) {
+        alert("Erro no processamento em lote.");
+    } finally {
+        setIsGenerating(false);
+    }
   };
+
+  const handleExportExcel = () => {
+    const header = reportMode === 'sector' ? "ID Setor;Nome Setor;RH;Adesão %\n" : "ID PG;Nome PG;Líder;Total;Adesão %\n";
+    let csv = "\ufeff" + header;
+    reportData.forEach(item => {
+        csv += `${item.code};${item.name};${item.denominator};${item.coverage_percent.toFixed(2)}%\n`;
+    });
+    saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Relatorio_${reportMode}.csv`);
+  };
+
+  const periodLabel = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+  const currentLayout = selectedUnit === 'Belém' ? settings.layout?.belem : settings.layout?.barcarena;
 
   return (
-    <div className="space-y-10 text-left">
-      {/* Cards invisíveis para captura */}
-      <div style={{ position: 'fixed', top: '-5000px' }}>
-          {renderItems.map(item => (
-              <div key={item.id} id={`rep-card-${item.id}`} style={{ width: '800px', padding: '40px' }} className="bg-white border-2 border-slate-200 rounded-[2rem] flex items-center justify-between">
-                  <div className="flex-1">
-                      <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">Setor / Cobertura</p>
-                      <h4 className="text-4xl font-black text-slate-900 uppercase">{item.name}</h4>
-                      <div className="flex gap-10 mt-6">
-                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Integrantes / Base RH</p><p className="text-2xl font-black">{item.numerator} / {item.denominator}</p></div>
-                          <div><p className="text-[10px] font-bold text-slate-400 uppercase">Índice</p><p className="text-2xl font-black text-green-600">{item.coverage_percent.toFixed(1)}%</p></div>
-                      </div>
-                  </div>
-                  <div className="w-1 bg-slate-100 h-24 mx-10"></div>
-                  <div className="text-center w-32"><span className="text-4xl">👥</span><p className="text-[8px] font-black text-slate-300 mt-2 uppercase">Pequenos Grupos</p></div>
-              </div>
-          ))}
-      </div>
-
-      <header className="flex justify-between items-center">
+    <div className="space-y-10 animate-in fade-in duration-500 pb-20 text-left">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 no-print">
         <div>
-          <h2 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Relatórios de Cobertura</h2>
-          <p className="text-slate-500 font-medium">Extraia os índices de participação por setor.</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Auditoria de Adesão</h2>
+          <p className="text-slate-500 font-medium">Controle oficial por {reportMode === 'sector' ? 'departamentos' : 'grupos'}.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+           <button onClick={handleExportExcel} className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-emerald-100 flex items-center gap-2 hover:bg-emerald-100 transition-all"><Download size={16}/> Exportar Dados</button>
+           {reportData.length === 1 ? (
+               <button onClick={() => setConfigModalItem(reportData[0])} disabled={isGenerating} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-blue-100"><Printer size={16}/> Abrir PDF</button>
+           ) : (
+               <button onClick={handleBatchZip} disabled={isGenerating} className="bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center gap-2"><Archive size={16}/> Gerar Lote (ZIP)</button>
+           )}
         </div>
       </header>
 
-      {/* FILTROS DE PERÍODO */}
-      <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-        <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade Hospitalar</label>
-            <select value={selectedUnit} onChange={e => setSelectedUnit(e.target.value as HospitalUnit)} className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold">
-                <option value="Belém">Belém</option>
-                <option value="Barcarena">Barcarena</option>
-            </select>
-        </div>
-        <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Inicial</label>
-            <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full pl-12 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+      {/* BARRA DE FILTROS LOCKED_GLOBAL_REPORTS_V32 */}
+      <div className="flex flex-col md:flex-row gap-6 items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm no-print">
+         <div className="relative w-full md:w-80 group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+            <input type="text" placeholder={`Filtrar...`} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-[1.5rem] font-bold outline-none" />
+         </div>
+         
+         <div className="flex flex-col sm:flex-row gap-4 items-center">
+            {/* SELETOR DE UNIDADE (RESTAURADO E FUNCIONAL) */}
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                <button onClick={() => setSelectedUnit('Belém')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Belém' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>HAB</button>
+                <button onClick={() => setSelectedUnit('Barcarena')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Barcarena' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>HABA</button>
             </div>
-        </div>
-        <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Data Final</label>
-            <div className="relative">
-                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full pl-12 pr-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold"/>
+
+            {/* SELETOR DE MODO */}
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                <button onClick={() => setReportMode('sector')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase ${reportMode === 'sector' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Building2 size={14}/> Setores</button>
+                <button onClick={() => setReportMode('pg')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase ${reportMode === 'pg' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}><Flame size={14}/> PGs</button>
             </div>
-        </div>
+         </div>
       </div>
 
-      <div className="bg-white rounded-[3rem] border border-slate-200 overflow-hidden shadow-sm">
-          <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr className="text-slate-400 font-black uppercase text-[10px] tracking-widest">
-                      <th className="py-6 px-10">Setor Hospitalar</th>
-                      <th className="py-6 px-4">Cobertura %</th>
-                      <th className="py-6 px-10 text-right">Ação</th>
-                  </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                  {reportItems.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50 transition-all">
-                          <td className="py-8 px-10">
-                              <p className="font-black text-slate-800 text-lg uppercase">{item.name}</p>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Código RH: {item.code}</p>
-                          </td>
-                          <td className="py-8 px-4">
-                              <div className="flex items-center gap-4">
-                                  <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                      <div className={`h-full ${item.coverage_percent >= 80 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }}></div>
-                                  </div>
-                                  <span className="font-black text-slate-700">{item.coverage_percent.toFixed(1)}%</span>
-                              </div>
-                          </td>
-                          <td className="py-8 px-10 text-right">
-                              <button onClick={() => handleSingleExport(item)} disabled={generatingId !== null} className="px-6 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 ml-auto shadow-md hover:bg-black">
-                                  {generatingId === item.id ? <Loader2 className="animate-spin" size={14}/> : '📄'} Gerar PDF
-                              </button>
-                          </td>
-                      </tr>
-                  ))}
-              </tbody>
-          </table>
+      <div className="space-y-6 no-print">
+         {reportData.map(item => (
+            <div key={item.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 group shadow-sm hover:border-blue-200 transition-all">
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4">
+                  <div className="flex items-center gap-4">
+                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all`}>{item.name.charAt(0)}</div>
+                     <div>
+                        <h4 className="text-lg font-black text-slate-800 leading-tight">{item.name}</h4>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{reportMode === 'sector' ? `Cód: ${item.code}` : `Líder: ${item.leader_name}`}</p>
+                     </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                     <div className="text-right">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Participantes</p>
+                        <p className="text-xl font-black text-slate-800">{item.numerator} <span className="text-sm text-slate-300">/ {item.denominator}</span></p>
+                     </div>
+                     <div className="flex gap-2">
+                        {reportMode === 'sector' && (
+                            <button onClick={() => setAuditingItem(item)} className="p-3 bg-slate-50 text-slate-500 hover:bg-blue-600 hover:text-white rounded-xl transition-all flex items-center gap-2"><Users size={18}/><span className="hidden sm:inline text-[9px] font-black uppercase">Membros</span></button>
+                        )}
+                        {/* IMPRESSORA MANTIDA (REQUISITO V32) */}
+                        <button onClick={() => setConfigModalItem(item)} className="p-3 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all"><Printer size={18}/></button>
+                     </div>
+                  </div>
+               </div>
+               <div className="relative w-full h-10 bg-slate-100 rounded-2xl overflow-hidden">
+                  <div className={`absolute left-0 top-0 h-full transition-all duration-1000 ${item.coverage_percent < 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }} />
+               </div>
+            </div>
+         ))}
+         {reportData.length === 0 && (
+             <div className="py-20 text-center bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-200">
+                 <p className="text-slate-400 font-bold italic">Nenhum dado encontrado para esta unidade/filtro.</p>
+             </div>
+         )}
       </div>
+
+      <div className="fixed opacity-0 pointer-events-none -z-50 left-[-5000px] top-0">
+          {reportData.map(item => (
+              <ReportPrintTemplate 
+                key={item.id} id={item.id} data={item}
+                assets={{ header: (selectedUnit === 'Belém' ? settings.template_belem_url : settings.template_barcarena_url) || '', footer: null, signature: settings.signature_url ? { data: settings.signature_url, ratio: 1 } : null }}
+                layout={currentLayout || ({} as any)} settings={settings} periodText={periodLabel} mode={reportMode}
+              />
+          ))}
+      </div>
+
+      {configModalItem && (
+          <div className="fixed inset-0 bg-blue-950/60 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 duration-300">
+                  <div className="flex justify-between items-start mb-8 text-left">
+                      <div><h3 className="text-2xl font-black text-slate-800 tracking-tight">Relatório Oficial</h3><p className="text-slate-500 text-xs font-bold uppercase">{configModalItem.name}</p></div>
+                      <button onClick={() => setConfigModalItem(null)} className="p-2 text-slate-400 hover:text-slate-800"><X size={24}/></button>
+                  </div>
+                  <div className="space-y-8">
+                      <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 text-left">
+                          <label className="flex items-center justify-between cursor-pointer group">
+                              <div className="flex items-center gap-4"><div className={`p-3 rounded-2xl ${includePhotos ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}><Camera size={20}/></div><div><p className="font-black text-slate-800 text-sm">Anexar Evidências?</p></div></div>
+                              <input type="checkbox" checked={includePhotos} onChange={e => setIncludePhotos(e.target.checked)} className="hidden" />
+                              <div className={`w-12 h-6 rounded-full relative ${includePhotos ? 'bg-blue-600' : 'bg-slate-300'}`}><div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${includePhotos ? 'left-7' : 'left-1'}`} /></div>
+                          </label>
+                          {includePhotos && (
+                              <div className="mt-8 space-y-4 animate-in fade-in">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Quantidade de fotos:</p>
+                                  <div className="flex gap-2">
+                                      {[1, 2, 4].map(num => (
+                                          <button key={num} onClick={() => setPhotoLimit(num)} className={`flex-1 py-3 rounded-xl font-black text-sm transition-all ${photoLimit === num ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-400'}`}>{num}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                      <button onClick={() => generateSinglePDF(configModalItem)} className="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black uppercase text-xs tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3"><Printer size={18}/> Gerar Documento</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {auditingItem && (
+          <div className="fixed inset-0 bg-blue-950/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl p-10 animate-in zoom-in-95 duration-300 max-h-[85vh] overflow-hidden flex flex-col text-left">
+                  <div className="flex justify-between items-start mb-6">
+                      <div><h3 className="text-2xl font-black text-slate-800 tracking-tight">Participantes: {auditingItem.name}</h3></div>
+                      <button onClick={() => setAuditingItem(null)} className="p-2 text-slate-400 hover:text-slate-800"><X size={28}/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="space-y-4">
+                          {auditingItem.members_list.map(member => (
+                              <div key={member.id} className="p-6 bg-slate-50 border border-slate-200 rounded-[2rem] flex justify-between items-center">
+                                  <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-black text-blue-600">{member.full_name.charAt(0)}</div>
+                                      <div><p className="font-black text-slate-800 text-sm">{member.full_name}</p><p className="text-[9px] font-black text-slate-400 uppercase">Setor: {member.sector_name}</p></div>
+                                  </div>
+                                  <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[8px] font-black uppercase">Ativo</span>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {isGenerating && (
+        <div className="fixed inset-0 bg-blue-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+            <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full text-center">
+                <Loader2 className="animate-spin text-blue-600 mx-auto mb-6" size={48} />
+                <h3 className="text-xl font-black text-slate-800">Preparando Lote</h3>
+                <p className="text-slate-500 text-sm">Convertendo evidências e gerando documentos...</p>
+            </div>
+        </div>
+      )}
     </div>
   );
 };
