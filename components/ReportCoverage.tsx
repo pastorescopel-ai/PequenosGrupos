@@ -54,7 +54,6 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
 
   const normalize = (s?: string) => s ? s.trim().toUpperCase() : '';
 
-  // BUFFER BASE64 V29 (Mantido para garantir pixels no PDF)
   const imageUrlToBase64 = async (url: string): Promise<string> => {
     try {
       const response = await fetch(url, { cache: 'no-cache' });
@@ -77,6 +76,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
       if (reportMode === 'sector') {
           const rhBaseBySector = new Map<string, Collaborator[]>();
           allCollaborators.filter(c => c.active).forEach(c => {
+              // Verifica se o colaborador pertence à unidade selecionada
               if (c.hospital === selectedUnit || (!c.hospital && isBelem)) {
                  const name = normalize(c.sector_name);
                  if (!rhBaseBySector.has(name)) rhBaseBySector.set(name, []);
@@ -98,7 +98,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
               addParticipant({ id: l.id, employee_id: l.employee_id, full_name: l.full_name, sector_name: l.sector_name, hospital: l.hospital });
           });
 
-          // LOCKED_GLOBAL_REPORTS_V32: Garantindo que setores da unidade selecionada apareçam
+          // Filtragem estrita dos setores pela unidade selecionada (HAB/HABA)
           const targetSectors = sectors.filter(s => s.active && (s.hospital === selectedUnit || (!s.hospital && isBelem)));
           
           return targetSectors.map(sector => {
@@ -127,6 +127,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
               searchTerm === '' || item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.code.toLowerCase().includes(searchTerm.toLowerCase())
           ).sort((a, b) => a.name.localeCompare(b.name));
       } else {
+          // Filtragem dos PGs pela unidade selecionada
           const targetPGs = pgs.filter(pg => pg.active && (pg.hospital === selectedUnit || (!pg.hospital && isBelem)));
           return targetPGs.map(pg => {
               const pgLeader = leaders.find(l => l.pg_name === pg.name && l.active && (l.hospital === selectedUnit || (!l.hospital && isBelem)));
@@ -186,6 +187,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
         alert("Erro ao gerar PDF.");
     } finally {
         setIsGenerating(false);
+        setGenProgress(0);
         setConfigModalItem(null);
     }
   };
@@ -214,21 +216,21 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
             zip.file(`${item.name.replace(/[/\\?%*:|"<>]/g, '-')}.pdf`, pdfBlob);
         }
         const content = await zip.generateAsync({ type: 'blob' });
-        saveAs(content, `Lote_Auditoria_${selectedUnit}_${reportMode}.zip`);
+        saveAs(content, `Auditoria_Consolidada_${selectedUnit}.zip`);
     } catch (e) {
-        alert("Erro no processamento em lote.");
+        alert("Erro na exportação.");
     } finally {
         setIsGenerating(false);
     }
   };
 
   const handleExportExcel = () => {
-    const header = reportMode === 'sector' ? "ID Setor;Nome Setor;RH;Adesão %\n" : "ID PG;Nome PG;Líder;Total;Adesão %\n";
+    const header = reportMode === 'sector' ? "Setor;RH;Ativos;Adesao%\n" : "PG;Lider;Total;Adesao%\n";
     let csv = "\ufeff" + header;
     reportData.forEach(item => {
-        csv += `${item.code};${item.name};${item.denominator};${item.coverage_percent.toFixed(2)}%\n`;
+        csv += `${item.name};${item.denominator};${item.numerator};${item.coverage_percent.toFixed(2)}%\n`;
     });
-    saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Relatorio_${reportMode}.csv`);
+    saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Estatistica_${reportMode}.csv`);
   };
 
   const periodLabel = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
@@ -239,19 +241,19 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 no-print">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Auditoria de Adesão</h2>
-          <p className="text-slate-500 font-medium">Controle oficial por {reportMode === 'sector' ? 'departamentos' : 'grupos'}.</p>
+          <p className="text-slate-500 font-medium">Unidade ativa: <b className="text-blue-600">{selectedUnit}</b></p>
         </div>
         <div className="flex flex-wrap gap-3">
-           <button onClick={handleExportExcel} className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-emerald-100 flex items-center gap-2 hover:bg-emerald-100 transition-all"><Download size={16}/> Exportar Dados</button>
+           <button onClick={handleExportExcel} className="bg-emerald-50 text-emerald-700 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-emerald-100 flex items-center gap-2 hover:bg-emerald-100 transition-all"><Download size={16}/> Exportar Excel</button>
            {reportData.length === 1 ? (
                <button onClick={() => setConfigModalItem(reportData[0])} disabled={isGenerating} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-blue-100"><Printer size={16}/> Abrir PDF</button>
-           ) : (
+           ) : reportData.length > 1 ? (
                <button onClick={handleBatchZip} disabled={isGenerating} className="bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center gap-2"><Archive size={16}/> Gerar Lote (ZIP)</button>
-           )}
+           ) : null}
         </div>
       </header>
 
-      {/* BARRA DE FILTROS LOCKED_GLOBAL_REPORTS_V32 */}
+      {/* FILTROS LOCKED_REPORTS_V32 */}
       <div className="flex flex-col md:flex-row gap-6 items-center bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm no-print">
          <div className="relative w-full md:w-80 group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
@@ -259,13 +261,13 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
          </div>
          
          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            {/* SELETOR DE UNIDADE (RESTAURADO E FUNCIONAL) */}
+            {/* SELETOR DE UNIDADE (HAB / HABA) */}
             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
                 <button onClick={() => setSelectedUnit('Belém')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Belém' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>HAB</button>
                 <button onClick={() => setSelectedUnit('Barcarena')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${selectedUnit === 'Barcarena' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>HABA</button>
             </div>
 
-            {/* SELETOR DE MODO */}
+            {/* SELETOR DE MODO (Setores / PGs) */}
             <div className="flex bg-slate-100 p-1.5 rounded-2xl">
                 <button onClick={() => setReportMode('sector')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase ${reportMode === 'sector' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Building2 size={14}/> Setores</button>
                 <button onClick={() => setReportMode('pg')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase ${reportMode === 'pg' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}><Flame size={14}/> PGs</button>
@@ -281,24 +283,24 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-slate-50 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all`}>{item.name.charAt(0)}</div>
                      <div>
                         <h4 className="text-lg font-black text-slate-800 leading-tight">{item.name}</h4>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{reportMode === 'sector' ? `Cód: ${item.code}` : `Líder: ${item.leader_name}`}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{reportMode === 'sector' ? `ID: ${item.code}` : `Líder: ${item.leader_name}`}</p>
                      </div>
                   </div>
                   <div className="flex items-center gap-6">
                      <div className="text-right">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Participantes</p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Participação</p>
                         <p className="text-xl font-black text-slate-800">{item.numerator} <span className="text-sm text-slate-300">/ {item.denominator}</span></p>
                      </div>
                      <div className="flex gap-2">
                         {reportMode === 'sector' && (
                             <button onClick={() => setAuditingItem(item)} className="p-3 bg-slate-50 text-slate-500 hover:bg-blue-600 hover:text-white rounded-xl transition-all flex items-center gap-2"><Users size={18}/><span className="hidden sm:inline text-[9px] font-black uppercase">Membros</span></button>
                         )}
-                        {/* IMPRESSORA MANTIDA (REQUISITO V32) */}
+                        {/* IMPRESSORA AZUL AO LADO DO CARD */}
                         <button onClick={() => setConfigModalItem(item)} className="p-3 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all"><Printer size={18}/></button>
                      </div>
                   </div>
                </div>
-               <div className="relative w-full h-10 bg-slate-100 rounded-2xl overflow-hidden">
+               <div className="relative w-full h-10 bg-slate-100 rounded-2xl overflow-hidden shadow-inner">
                   <div className={`absolute left-0 top-0 h-full transition-all duration-1000 ${item.coverage_percent < 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(item.coverage_percent, 100)}%` }} />
                </div>
             </div>
@@ -364,9 +366,9 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
                               <div key={member.id} className="p-6 bg-slate-50 border border-slate-200 rounded-[2rem] flex justify-between items-center">
                                   <div className="flex items-center gap-3">
                                       <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-black text-blue-600">{member.full_name.charAt(0)}</div>
-                                      <div><p className="font-black text-slate-800 text-sm">{member.full_name}</p><p className="text-[9px] font-black text-slate-400 uppercase">Setor: {member.sector_name}</p></div>
+                                      <div><p className="font-black text-slate-800 text-sm">{member.full_name}</p><p className="text-[9px] font-black text-slate-400 uppercase">Matrícula: {member.employee_id}</p></div>
                                   </div>
-                                  <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[8px] font-black uppercase">Ativo</span>
+                                  <span className="bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full text-[8px] font-black uppercase">Vínculo RH</span>
                               </div>
                           ))}
                       </div>
@@ -380,7 +382,7 @@ const ReportCoverage: React.FC<ReportCoverageProps> = ({
             <div className="bg-white rounded-[2.5rem] p-10 max-w-md w-full text-center">
                 <Loader2 className="animate-spin text-blue-600 mx-auto mb-6" size={48} />
                 <h3 className="text-xl font-black text-slate-800">Preparando Lote</h3>
-                <p className="text-slate-500 text-sm">Convertendo evidências e gerando documentos...</p>
+                <p className="text-slate-500 text-sm">Este processo pode levar alguns segundos.</p>
             </div>
         </div>
       )}

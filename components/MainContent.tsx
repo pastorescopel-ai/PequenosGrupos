@@ -111,7 +111,7 @@ const MainContent: React.FC<MainContentProps> = ({
                   leader_name: currentUser.full_name, 
                   hospital: currentUser.hospital, 
                   pg_name: currentUser.pg_name,
-                  sector_name: d.sector_name // LOCKED_REPORT_SHIELD_V31: Persistindo setor
+                  sector_name: d.sector_name 
               };
               await safeDbAction(async () => await setDoc(doc(collection(db, "pg_photos"), newPhoto.id), newPhoto));
             }} 
@@ -124,7 +124,8 @@ const MainContent: React.FC<MainContentProps> = ({
         return <SystemAdminsView leaders={leaders} allCollaborators={allCollaborators} pgs={pgs} sectors={sectors} onUpdateUser={handleUpdateUser} />;
 
       case 'profile':
-        return <ProfileView user={currentUser} onUpdate={handleUpdateUser} />;
+        // ELITE_INTEGRITY_SHIELD_V33: Adicionado allCollaborators para o lookup de perfil funcionar sem crashar
+        return <ProfileView user={currentUser} onUpdate={handleUpdateUser} allCollaborators={allCollaborators} />;
 
       default:
         return <div className="p-20 text-center text-slate-300 font-bold italic text-sm">Selecione uma opção no menu lateral.</div>;

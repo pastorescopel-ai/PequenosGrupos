@@ -48,21 +48,9 @@ export const useAuth = () => {
         if (user) {
           const userEmailLower = user.email?.toLowerCase().trim();
           
-          if (userEmailLower === ADMIN_EMAIL.toLowerCase()) {
-            setCurrentUser({
-               id: user.uid,
-               email: user.email!,
-               full_name: 'Administrador Master',
-               employee_id: 'ADM001',
-               hospital: 'Belém',
-               is_admin: true,
-               role: 'ADMIN',
-               status: 'approved',
-               active: true,
-               sector_name: 'Diretoria'
-            });
-          } else if (db) {
+          if (db) {
             try {
+              // Busca o documento do líder (Admin ou Comum) pelo e-mail
               const q = query(collection(db, "leaders"), where("email", "==", userEmailLower));
               const querySnapshot = await getDocs(q);
               
@@ -75,6 +63,7 @@ export const useAuth = () => {
                   setCurrentUser(null);
                   await signOut(auth);
                 } else {
+                  // Sincroniza o UID do Auth com o documento do Firestore se necessário
                   if (leaderData.id !== user.uid) {
                       await updateDoc(doc(db, "leaders", leaderDoc.id), { id: user.uid });
                   }
@@ -83,12 +72,29 @@ export const useAuth = () => {
                   clearUrlParams();
                 }
               } else {
-                setAuthError("Seu e-mail está autenticado, mas não foi encontrado registro no banco de dados.");
-                setCurrentUser(null);
+                // Caso especial: Admin Master logado pela primeira vez ou sem documento
+                if (userEmailLower === ADMIN_EMAIL.toLowerCase()) {
+                  setCurrentUser({
+                    id: user.uid,
+                    email: user.email!,
+                    full_name: 'Administrador Master',
+                    employee_id: 'ADM001',
+                    hospital: 'Belém',
+                    is_admin: true,
+                    role: 'ADMIN',
+                    status: 'approved',
+                    active: true,
+                    sector_name: 'Diretoria'
+                  });
+                  setAuthError(null);
+                } else {
+                  setAuthError("Seu e-mail está autenticado, mas não foi encontrado registro no banco de dados.");
+                  setCurrentUser(null);
+                }
               }
             } catch (firestoreErr: any) {
               if (firestoreErr.code === 'permission-denied') {
-                setAuthError("Erro de Permissão: O banco de dados está bloqueado. Configure as 'Security Rules' no Console do Firebase.");
+                setAuthError("Erro de Permissão no banco de dados.");
               } else {
                 throw firestoreErr;
               }
@@ -135,16 +141,11 @@ export const useAuth = () => {
 
     const email = rawEmail.toLowerCase().trim();
     try {
-      // 1. Verifica pré-cadastro (proteção contra erro de permissão)
       let checkSnapshot;
       try {
         const qCheck = query(collection(db, "leaders"), where("email", "==", email));
         checkSnapshot = await getDocs(qCheck);
       } catch (permErr: any) {
-        if (permErr.code === 'permission-denied') {
-          setAuthError("ERRO CRÍTICO: Falha de permissão no Firestore. O administrador deve liberar o acesso de leitura pública para a tabela 'leaders' nas regras de segurança.");
-          return;
-        }
         throw permErr;
       }
 
@@ -169,8 +170,6 @@ export const useAuth = () => {
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         setAuthError("Este e-mail já possui uma conta. Tente fazer login.");
-      } else if (error.code === 'permission-denied') {
-        setAuthError("Falta de permissão no banco de dados.");
       } else {
         setAuthError("Erro ao criar conta: " + error.message);
       }

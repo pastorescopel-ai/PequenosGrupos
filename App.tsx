@@ -39,14 +39,11 @@ const App: React.FC = () => {
     if (Notification.permission === 'default') {
       const granted = await requestNotificationPermission();
       if (granted) {
-        const q = query(collection(db, "leaders"), where("email", "==", currentUser.email));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          await updateDoc(doc(db, "leaders", snapshot.docs[0].id), { 
+        const leaderDocRef = doc(db, "leaders", currentUser.id);
+        await setDoc(leaderDocRef, { 
             browser_notifications_enabled: true 
-          });
-          setCurrentUser(prev => prev ? { ...prev, browser_notifications_enabled: true } : null);
-        }
+        }, { merge: true });
+        setCurrentUser(prev => prev ? { ...prev, browser_notifications_enabled: true } : null);
       }
       window.removeEventListener('click', triggerAutoNotification);
       window.removeEventListener('touchstart', triggerAutoNotification);
@@ -86,15 +83,12 @@ const App: React.FC = () => {
     safeDbAction
   } = useFirestoreData(currentUser);
 
+  // ELITE_INTEGRITY_SHIELD_V32: Salvamento via ID direto para garantir persistência total
   const handleUpdateUser = async (updatedData: Partial<Leader>) => {
     if (!currentUser) return;
     await safeDbAction(async () => {
-       const q = query(collection(db, "leaders"), where("email", "==", currentUser.email));
-       const snapshot = await getDocs(q);
-       if (!snapshot.empty) {
-         const leaderDocRef = doc(db, "leaders", snapshot.docs[0].id);
-         await updateDoc(leaderDocRef, updatedData);
-       }
+       const leaderDocRef = doc(db, "leaders", currentUser.id);
+       await setDoc(leaderDocRef, updatedData, { merge: true });
        setCurrentUser(prev => prev ? { ...prev, ...updatedData } : null);
     });
   };

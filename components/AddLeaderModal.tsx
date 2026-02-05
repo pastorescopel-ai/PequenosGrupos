@@ -37,6 +37,22 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
     hospital: 'Belém' as HospitalUnit
   });
 
+  // ELITE_INTEGRITY_SHIELD_V32: Observer de Matrícula para preenchimento automático
+  useEffect(() => {
+    if (!formData.isExternal && formData.matricula.length >= 4) {
+      const collab = allCollaborators.find(c => c.employee_id === formData.matricula);
+      if (collab) {
+        setFormData(prev => ({
+          ...prev,
+          name: collab.full_name,
+          sector: collab.sector_name,
+          hospital: collab.hospital || prev.hospital
+        }));
+        setSectorSearch(collab.sector_name);
+      }
+    }
+  }, [formData.matricula, formData.isExternal, allCollaborators]);
+
   // Fechar dropdowns ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -59,7 +75,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         c.active && 
         ((c.full_name || '').toLowerCase().includes(lowerTerm) || 
          (c.employee_id || '').includes(searchTerm))
-      ).slice(0, 20); // Aumentado para 20 resultados
+      ).slice(0, 20); 
       setSearchResults(filtered);
       setShowResults(true);
     } else {
@@ -73,7 +89,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
     if (sectorSearch.length >= 1) {
         const lower = sectorSearch.toLowerCase();
         const filtered = sectors.filter(s => 
-            (s.hospital === formData.hospital || !s.hospital) && // Filtra pela unidade
+            (s.hospital === formData.hospital || !s.hospital) && 
             ((s.name || '').toLowerCase().includes(lower) || (s.code || '').toLowerCase().includes(lower))
         ).slice(0, 10);
         setSectorResults(filtered);
@@ -93,7 +109,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
       hospital: collab.hospital || prev.hospital
     }));
     setSearchTerm(collab.full_name);
-    setSectorSearch(collab.sector_name); // Preenche o setor também
+    setSectorSearch(collab.sector_name); 
     setShowResults(false);
   };
 
@@ -117,8 +133,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
       alert("Por favor, selecione um Pequeno Grupo.");
       return;
     }
-    // Garante que o setor no form data seja o que está no input de busca se o usuário digitou e não selecionou
-    const finalData = { ...formData, sector: sectorSearch }; 
+    const finalData = { ...formData, sector: sectorSearch || formData.sector }; 
     if (!finalData.sector) {
         alert("O campo Setor é obrigatório.");
         return;
@@ -145,7 +160,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
             <h3 className="text-2xl font-black text-slate-800 flex items-center gap-3">
               <UserCog className="text-blue-600" /> Cadastro de Novo Líder
             </h3>
-            <p className="text-slate-500 text-xs font-medium">Configure os acessos de liderança ministerial.</p>
+            <p className="text-slate-500 text-xs font-medium">Digite a matrícula para preenchimento automático.</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X size={24}/>
@@ -154,23 +169,18 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
         
         <form className="space-y-6" onSubmit={handleSubmit}>
           
-          <div className="flex items-center gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100 cursor-pointer hover:bg-blue-100/50 transition-colors"
+          <div className="flex items-center gap-3 bg-blue-50 p-4 rounded-2xl border border-blue-100 cursor-pointer"
                onClick={() => setFormData({...formData, isExternal: !formData.isExternal, matricula: '', name: '', sector: ''})}>
-            <input 
-              type="checkbox" 
-              className="w-5 h-5 rounded accent-blue-600" 
-              checked={formData.isExternal} 
-              readOnly
-            />
+            <input type="checkbox" className="w-5 h-5 rounded accent-blue-600" checked={formData.isExternal} readOnly />
             <div>
               <span className="text-xs font-black uppercase text-blue-800 block">Líder Externo / Prestador</span>
-              <span className="text-[10px] text-blue-600 font-medium italic">Marque para cadastrar alguém que não está na base oficial do RH.</span>
+              <span className="text-[10px] text-blue-600 font-medium italic">Se ativo, a matrícula e busca manual de RH serão desabilitadas.</span>
             </div>
           </div>
 
           {!formData.isExternal && (
             <div className="space-y-1.5 relative" ref={dropdownRef}>
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Buscar na Base RH</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Busca Rápida Nome</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                 <input 
@@ -178,28 +188,28 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-4 bg-slate-50 border-2 border-blue-100 rounded-2xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all"
-                  placeholder="Digite Nome ou Matrícula..."
+                  placeholder="Pesquisar colaborador..."
                 />
               </div>
 
               {showResults && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[110] animate-in slide-in-from-top-2 max-h-72 overflow-y-auto custom-scrollbar">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-[110] max-h-72 overflow-y-auto">
                   {searchResults.map(collab => (
                     <button
                       key={collab.id}
                       type="button"
                       onClick={() => handleSelectCollaborator(collab)}
-                      className="w-full p-4 text-left hover:bg-blue-50 flex items-center gap-4 transition-colors border-b border-slate-50 last:border-0 group"
+                      className="w-full p-4 text-left hover:bg-blue-50 flex items-center gap-4 transition-colors border-b border-slate-50 last:border-0"
                     >
-                      <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                      <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center font-black text-slate-400">
                         {collab.full_name.charAt(0)}
                       </div>
                       <div className="flex-1">
                         <p className="font-black text-slate-800 text-sm">{collab.full_name}</p>
-                        <p className="text-[10px] font-bold text-blue-600 uppercase font-black">SETOR: {collab.sector_name}</p>
+                        <p className="text-[10px] font-bold text-blue-600 uppercase">Setor: {collab.sector_name}</p>
                         <p className="text-[9px] font-bold text-slate-400 uppercase">Matrícula: {collab.employee_id}</p>
                       </div>
-                      <UserCheck size={16} className="text-slate-300 group-hover:text-blue-600" />
+                      <UserCheck size={16} className="text-slate-300" />
                     </button>
                   ))}
                 </div>
@@ -209,36 +219,35 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-slate-100">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Nome do Líder</label>
-              <input 
-                type="text" 
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                required 
-                readOnly={!formData.isExternal}
-                className={`w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10 ${!formData.isExternal && 'text-slate-500 bg-slate-50/50'}`}
-                placeholder="Nome Completo"
-              />
-            </div>
-
-            <div className="space-y-1.5">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Matrícula (RH)</label>
               <div className="relative">
                 <ScanText className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                 <input 
                   type="text" 
                   value={formData.matricula}
-                  onChange={e => setFormData({...formData, matricula: e.target.value})}
+                  onChange={e => setFormData({...formData, matricula: e.target.value.toUpperCase()})}
                   required={!formData.isExternal}
-                  readOnly={!formData.isExternal}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10 ${!formData.isExternal ? 'text-slate-500 bg-slate-50/50' : ''}`}
-                  placeholder={formData.isExternal ? "ID Externo" : "Matrícula"}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
+                  placeholder={formData.isExternal ? "ID Externo" : "Digite a matrícula..."}
                 />
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Nome Completo</label>
+              <input 
+                type="text" 
+                value={formData.name}
+                onChange={e => setFormData({...formData, name: e.target.value})}
+                required 
+                readOnly={!formData.isExternal && formData.name !== ''}
+                className={`w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none ${!formData.isExternal && formData.name !== '' && 'text-slate-500'}`}
+                placeholder="Nome do Líder"
+              />
+            </div>
+
             <div className="space-y-1.5" ref={sectorDropdownRef}>
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Setor Principal</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest px-1">Setor</label>
               <div className="relative">
                 <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
                 <input 
@@ -246,13 +255,11 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                   value={sectorSearch}
                   onChange={e => { setSectorSearch(e.target.value); setFormData({...formData, sector: e.target.value}); }}
                   required 
-                  readOnly={!formData.isExternal}
-                  className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10 ${!formData.isExternal && 'text-slate-500 bg-slate-50/50'}`}
-                  placeholder="Busque o Setor..."
-                  onFocus={() => { if(formData.isExternal) setShowSectorResults(true); }}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
+                  placeholder="Setor de atuação"
+                  onFocus={() => setShowSectorResults(true)}
                 />
-                
-                {showSectorResults && formData.isExternal && (
+                {showSectorResults && sectorResults.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
                         {sectorResults.map(sec => (
                             <button
@@ -264,9 +271,6 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                                 {sec.name}
                             </button>
                         ))}
-                        {sectorResults.length === 0 && (
-                            <div className="p-3 text-xs text-slate-400 italic text-center">Nenhum setor encontrado.</div>
-                        )}
                     </div>
                 )}
               </div>
@@ -282,20 +286,20 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                   onChange={handlePhoneChange}
                   required 
                   maxLength={15}
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none"
                   placeholder="(91) 99999-9999"
                 />
               </div>
             </div>
 
             <div className="md:col-span-2 space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">E-mail de Acesso (Login)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">E-mail de Login</label>
               <input 
                 type="email" 
                 value={formData.email}
                 onChange={e => setFormData({...formData, email: e.target.value.toLowerCase().trim()})}
                 required 
-                className="w-full px-5 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
+                className="w-full px-5 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none"
                 placeholder="email@hospital.com"
               />
             </div>
@@ -303,12 +307,12 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Unidade</label>
               <select 
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold focus:ring-4 focus:ring-blue-500/10" 
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold" 
                 value={formData.hospital} 
                 onChange={e => setFormData({...formData, hospital: e.target.value as any, pgId: ''})}
               >
-                <option value="Belém">Hospital Belém</option>
-                <option value="Barcarena">Hospital Barcarena</option>
+                <option value="Belém">Hospital Belém (HAB)</option>
+                <option value="Barcarena">Hospital Barcarena (HABA)</option>
               </select>
             </div>
 
@@ -320,7 +324,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
                     value={formData.pgId}
                     onChange={e => setFormData({...formData, pgId: e.target.value})}
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-4 focus:ring-blue-500/10"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl font-bold outline-none"
                 >
                     <option value="">Selecione o PG...</option>
                     {filteredPGs.map(pg => (
@@ -333,7 +337,7 @@ const AddLeaderModal: React.FC<AddLeaderModalProps> = ({ onClose, onSave, allCol
 
           <div className="flex gap-4 pt-6">
             <button type="button" onClick={onClose} className="flex-1 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
-            <button type="submit" className="flex-1 py-4 bg-blue-600 text-white font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">Confirmar Cadastro</button>
+            <button type="submit" className="flex-1 py-4 bg-blue-600 text-white font-black uppercase text-xs tracking-widest rounded-2xl shadow-xl hover:bg-blue-700 transition-all">Finalizar Cadastro</button>
           </div>
         </form>
       </div>
